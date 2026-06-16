@@ -62,7 +62,10 @@ class ArmadaForm
                     ])
                     ->required(),
                 Select::make('status')
-                    ->options(['tersedia' => 'Tersedia', 'maintenance' => 'Maintenance', 'disewa' => 'Disewa'])
+                    ->options([
+                        'tersedia' => 'Tersedia',
+                        'maintenance' => 'Maintenance',
+                    ])
                     ->default('tersedia')
                     ->columnSpanFull()
                     ->native(false)

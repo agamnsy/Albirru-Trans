@@ -6,6 +6,7 @@ use App\Filament\Resources\Penyewaans\PenyewaanResource;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ViewAction;
 use Filament\Resources\Pages\EditRecord;
+use App\Models\Armada;
 
 class EditPenyewaan extends EditRecord
 {
@@ -16,8 +17,7 @@ class EditPenyewaan extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            // ViewAction::make(),
-            // DeleteAction::make(),
+            // 
         ];
     }
 
@@ -33,31 +33,5 @@ class EditPenyewaan extends EditRecord
         }
 
         return $data;
-    }
-
-    protected function beforeSave(): void
-    {
-        $this->oldArmadaId = $this->record->armada_id;
-    }
-
-    protected function afterSave(): void
-    {
-        $newArmadaId = $this->record->armada_id;
-
-        // kalau armada berubah
-        if ($this->oldArmadaId != $newArmadaId) {
-
-            // balikin armada lama
-            if ($this->oldArmadaId) {
-                \App\Models\Armada::where('id', $this->oldArmadaId)
-                    ->update(['status' => 'tersedia']);
-            }
-
-            // set armada baru
-            if ($newArmadaId) {
-                \App\Models\Armada::where('id', $newArmadaId)
-                    ->update(['status' => 'disewa']);
-            }
-        }
     }
 }

@@ -42,11 +42,17 @@ class ArmadasTable
                     ->toggleable(false),
                 TextColumn::make('status')
                     ->badge()
-                    ->formatStateUsing(fn (string $state): string => ucfirst($state))
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        'tersedia' => 'Tersedia',
+                        'maintenance' => 'Maintenance',
+                        'disewa' => 'Disewa',
+                        default => ucfirst($state),
+                    })
                     ->color(fn (string $state): string => match ($state) {
                         'tersedia' => 'success',
                         'maintenance' => 'warning',
                         'disewa' => 'danger',
+                        default => 'gray',
                     })
                     ->size('xl')
                     ->toggleable(false),
@@ -67,7 +73,6 @@ class ArmadasTable
                     ->options([
                         'tersedia' => 'Tersedia',
                         'maintenance' => 'Maintenance',
-                        'disewa' => 'Disewa',
                     ]),
                     TrashedFilter::make()
                     ->label('Data Terhapus')
@@ -95,22 +100,22 @@ class ArmadasTable
                     ->iconButton('heroicon-s-trash')
                     ->color('danger')
                     ->size('lg')
-                    ->tooltip(fn ($record) => 
-                        $record->status === 'disewa'
-                            ? 'Tidak bisa dihapus karena sedang disewa'
-                            : 'Hapus'
-                    )
+                    ->tooltip('Hapus')
                     ->before(function ($record, $action) {
 
-                        if ($record->status === 'disewa') {
-                
+                        $hasActiveBooking = $record->penyewaans()
+                            ->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
+                            ->exists();
+                    
+                        if ($hasActiveBooking) {
+                    
                             Notification::make()
                                 ->title('Tidak dapat menghapus armada')
-                                ->body('Armada ini sedang disewa. Selesaikan atau batalkan penyewaan terlebih dahulu.')
+                                ->body('Armada ini masih memiliki penyewaan aktif. Selesaikan atau batalkan penyewaan terlebih dahulu.')
                                 ->danger()
                                 ->duration(5000)
                                 ->send();
-
+                    
                             $action->cancel();
                         }
                     })
@@ -140,7 +145,11 @@ class ArmadasTable
                     
                             foreach ($records as $record) {
                     
-                                if ($record->status === 'disewa') {
+                                $hasActiveBooking = $record->penyewaans()
+                                    ->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
+                                    ->exists();
+
+                                if ($hasActiveBooking) {
                                     $blocked++;
                                     continue;
                                 }
@@ -160,13 +169,13 @@ class ArmadasTable
                             if ($blocked > 0) {
                                 Notification::make()
                                     ->title('Sebagian armada tidak dapat dihapus')
-                                    ->body("{$blocked} armada sedang disewa.")
+                                    ->body("{$blocked} armada masih memiliki penyewaan aktif.")
                                     ->danger()
                                     ->send();
                             }
                         })
                         ->modalHeading('Hapus Beberapa Data Armada?')
-                        ->modalDescription('Apakah Anda yakin ingin menghapus data armada yang dipilih?')
+                        ->modalDescription('Apakah Anda yakin ingin menghapus data armada ini? Data yang dihapus dapat dipulihkan kembali.')
                         ->modalSubmitActionLabel('Ya, Hapus')
                         ->modalCancelActionLabel('Batal')
                         ->successNotification(null),
