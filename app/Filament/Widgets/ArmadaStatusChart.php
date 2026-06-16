@@ -7,7 +7,7 @@ use Filament\Widgets\ChartWidget;
 
 class ArmadaStatusChart extends ChartWidget
 {
-    protected ?string $heading = 'Status Ketersedian Armada';
+    protected ?string $heading = 'Status Ketersediaan Armada';
 
     protected static bool $isLazy = false;
 
@@ -15,25 +15,41 @@ class ArmadaStatusChart extends ChartWidget
 
     protected function getData(): array
     {
-        // Menghitung data berdasarkan kolom 'status' di tabel armadas
-        $tersedia = Armada::where('status', 'tersedia')->count();
-        $disewa = Armada::where('status', 'disewa')->count();
-        $servis = Armada::where('status', 'maintenance')->count();
+        $tersedia = Armada::where('status', 'tersedia')
+            ->whereDoesntHave('penyewaans', function ($query) {
+                $query->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
+                    ->whereDate('tanggal_mulai', '<=', today())
+                    ->whereDate('tanggal_selesai', '>=', today());
+            })
+            ->count();
+
+        $sedangDisewa = Armada::where('status', 'tersedia')
+            ->whereHas('penyewaans', function ($query) {
+                $query->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
+                    ->whereDate('tanggal_mulai', '<=', today())
+                    ->whereDate('tanggal_selesai', '>=', today());
+            })
+            ->count();
+
+        $maintenance = Armada::where('status', 'maintenance')->count();
 
         return [
             'datasets' => [
                 [
                     'label' => 'Jumlah Armada',
-                    'data' => [$tersedia, $disewa, $servis],
+                    'data' => [$tersedia, $sedangDisewa, $maintenance],
                     'backgroundColor' => [
-                        '#10b981', // Hijau (Success) - Tersedia
-                        '#ef4444', // Merah (Danger) - Disewa
-                        '#f59e0b', // Kuning (Warning) - Servis
+                        '#10b981',
+                        '#ef4444',
+                        '#f59e0b',
                     ],
-                    // 'hoverOffset' => 4,
                 ],
             ],
-            'labels' => ['Tersedia', 'Disewa', 'Dalam Perbaikan'],
+            'labels' => [
+                'Tersedia Hari Ini',
+                'Sedang Disewa Hari Ini',
+                'Maintenance',
+            ],
         ];
     }
 
