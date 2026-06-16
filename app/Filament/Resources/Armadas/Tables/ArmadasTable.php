@@ -2,20 +2,23 @@
 
 namespace App\Filament\Resources\Armadas\Tables;
 
+use Carbon\Carbon;
+
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\RestoreAction;
-use Filament\Tables\Table;
 use Filament\Actions\RestoreBulkAction;
+
+use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TrashedFilter;
-// use Filament\Actions\ForceDeleteAction;
 use Filament\Tables\Actions\CreateAction;
+
 use Filament\Notifications\Notification;
 use Filament\Support\Colors\Color;
 
@@ -33,15 +36,19 @@ class ArmadasTable
                     ->overlap(4)
                     ->ring(8)
                     ->toggleable(false),
+
                 TextColumn::make('nama_bus')
                     ->searchable()
                     ->label('Nama Bus')
                     ->toggleable(false),
+
                 TextColumn::make('kapasitas')
                     ->numeric()
                     ->toggleable(false),
+
                 TextColumn::make('status')
                     ->badge()
+                    ->label('Status Unit')
                     ->formatStateUsing(fn (string $state): string => match ($state) {
                         'tersedia' => 'Tersedia',
                         'maintenance' => 'Maintenance',
@@ -56,14 +63,33 @@ class ArmadasTable
                     })
                     ->size('xl')
                     ->toggleable(false),
-                // TextColumn::make('created_at')
-                //     ->dateTime()
-                //     ->sortable()
-                //     ->toggleable(isToggledHiddenByDefault: true),
-                // TextColumn::make('updated_at')
-                //     ->dateTime()
-                //     ->sortable()
-                //     ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('status_hari_ini')
+                    ->label('Status Hari Ini')
+                    ->badge()
+                    ->getStateUsing(function ($record) {
+                        if ($record->status === 'maintenance') {
+                            return 'Tidak Aktif';
+                        }
+                
+                        $today = Carbon::today();
+                
+                        $sedangDisewa = $record->penyewaans()
+                            ->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
+                            ->whereDate('tanggal_mulai', '<=', $today)
+                            ->whereDate('tanggal_selesai', '>=', $today)
+                            ->exists();
+                
+                        return $sedangDisewa ? 'Sedang Disewa' : 'Tidak Disewa';
+                    })
+                    ->color(fn (string $state): string => match ($state) {
+                        'Sedang Disewa' => 'danger',
+                        'Tidak Disewa' => 'success',
+                        'Tidak Aktif' => 'gray',
+                        default => 'gray',
+                    })
+                    ->size('xl')
+                    ->toggleable(false),
             ])
             ->filters([
                 SelectFilter::make('status')
@@ -120,7 +146,7 @@ class ArmadasTable
                         }
                     })
                     ->modalHeading('Hapus Data Armada?')
-                    ->modalDescription('Apakah Anda yakin ingin menghapus data armada ini? Data yang telah dihapus tidak dapat dikembalikan.')
+                    ->modalDescription('Apakah Anda yakin ingin menghapus data armada ini? Data yang dihapus dapat dipulihkan kembali.')
                     ->modalSubmitActionLabel('Ya, Hapus')
                     ->modalCancelActionLabel('Batal')
                     ->successNotificationTitle('Armada telah dihapus'),
