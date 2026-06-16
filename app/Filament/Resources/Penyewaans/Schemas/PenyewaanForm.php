@@ -6,19 +6,84 @@ use App\Models\Pelanggan;
 use App\Models\Armada;
 use App\Models\Penyewaan;
 use App\Rules\NoEmoji;
+use Carbon\Carbon;
 
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
-use Filament\Schemas\Components\Grid;
+use Filament\Forms\Components\TimePicker;
+
 use Filament\Schemas\Schema;
+use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
+
 use Filament\Notifications\Notification;
 
 class PenyewaanForm
 {
+    private static function normalizeDate($date): ?string
+    {
+        if (! $date) {
+            return null;
+        }
+
+        return Carbon::parse($date)->format('Y-m-d');
+    }
+
+    private static function normalizeTime($time): ?string
+    {
+        if (! $time) {
+            return null;
+        }
+
+        return Carbon::parse($time)->format('H:i:s');
+    }
+
+    private static function combineDateTime($date, $time): ?string
+    {
+        $date = self::normalizeDate($date);
+        $time = self::normalizeTime($time);
+
+        if (! $date || ! $time) {
+            return null;
+        }
+
+        return Carbon::parse("{$date} {$time}")->format('Y-m-d H:i:s');
+    }
+
+    private static function hasBentrokJadwal(
+        $armadaId,
+        $tanggalMulai,
+        $jamMulai,
+        $tanggalSelesai,
+        $jamSelesai,
+        $ignorePenyewaanId = null
+    ): bool {
+        $waktuMulai = self::combineDateTime($tanggalMulai, $jamMulai);
+        $waktuSelesai = self::combineDateTime($tanggalSelesai, $jamSelesai);
+
+        if (! $armadaId || ! $waktuMulai || ! $waktuSelesai) {
+            return false;
+        }
+
+        return Penyewaan::where('armada_id', $armadaId)
+            ->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
+            ->when($ignorePenyewaanId, function ($query) use ($ignorePenyewaanId) {
+                $query->where('id', '!=', $ignorePenyewaanId);
+            })
+            ->whereRaw(
+                "TIMESTAMP(tanggal_mulai, COALESCE(jam_mulai, '00:00:00')) < ?",
+                [$waktuSelesai]
+            )
+            ->whereRaw(
+                "TIMESTAMP(tanggal_selesai, COALESCE(jam_selesai, '23:59:59')) > ?",
+                [$waktuMulai]
+            )
+            ->exists();
+    }
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -92,8 +157,8 @@ class PenyewaanForm
                         return $pelanggan->id;
                     }),
 
-                // --- Detail Tanggal ---
-                Grid::make(3)
+                // --- Detail Waktu Penyewaan ---
+                Grid::make(2)
                     ->columnSpanFull()
                     ->schema([
                         DatePicker::make('tanggal_mulai')
@@ -106,10 +171,25 @@ class PenyewaanForm
                                 $set('tanggal_selesai', null);
                                 $set('armada_id', null);
                             })
-                            // ->minDate(now())
                             ->placeholder('Pilih tanggal mulai sewa')
                             ->validationMessages([
                                 'required' => 'Tanggal mulai sewa wajib diisi.',
+                            ])
+                            ->required(),
+
+                        TimePicker::make('jam_mulai')
+                            ->label('Jam Mulai Sewa')
+                            ->native(false)
+                            ->seconds(false)
+                            ->default('07:00')
+                            ->dehydrated(true)
+                            ->dehydrateStateUsing(fn ($state) => $state ? Carbon::parse($state)->format('H:i') : null)
+                            ->live()
+                            ->afterStateUpdated(function (Set $set) {
+                                $set('armada_id', null);
+                            })
+                            ->validationMessages([
+                                'required' => 'Jam mulai sewa wajib diisi.',
                             ])
                             ->required(),
 
@@ -133,96 +213,112 @@ class PenyewaanForm
                                 'after_or_equal' => 'Tanggal selesai tidak boleh sebelum tanggal mulai.',
                                 'required' => 'Tanggal selesai sewa wajib diisi.',
                             ])
-                            ->rules(function (Get $get, $record) {
-                                return [
-                                    function (string $attribute, $value, \Closure $fail) use ($get, $record) {
-                                        $armadaId = $get('armada_id');
-                                        $tanggalMulai = $get('tanggal_mulai');
-                                        $tanggalSelesai = $value;
-
-                                        if (! $armadaId || ! $tanggalMulai || ! $tanggalSelesai) {
-                                            return;
-                                        }
-
-                                        $exists = Penyewaan::where('armada_id', $armadaId)
-                                            ->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
-                                            ->when($record, function ($query) use ($record) {
-                                                $query->where('id', '!=', $record->id);
-                                            })
-                                            ->whereDate('tanggal_mulai', '<=', $tanggalSelesai)
-                                            ->whereDate('tanggal_selesai', '>=', $tanggalMulai)
-                                            ->exists();
-
-                                        if ($exists) {
-                                            $fail('Armada ini sudah memiliki penyewaan aktif pada rentang tanggal tersebut.');
-                                        }
-                                    },
-                                ];
-                            })
                             ->required(),
-                        
-                        // --- Bagian Armada ---
-                        Select::make('armada_id')
-                        ->label('Armada yang Dipesan')
-                        ->placeholder(fn (Get $get) => ! $get('tanggal_mulai') || ! $get('tanggal_selesai')
-                            ? 'Pilih tanggal sewa terlebih dahulu'
-                            : 'Pilih armada'
-                        )
-                        ->disabled(fn (Get $get) => ! $get('tanggal_mulai') || ! $get('tanggal_selesai'))
-                        ->options(function (Get $get, $record) {
-                            $tanggalMulai = $get('tanggal_mulai');
-                            $tanggalSelesai = $get('tanggal_selesai');
 
-                            if (! $tanggalMulai || ! $tanggalSelesai) {
-                                return [];
-                            }
+                        TimePicker::make('jam_selesai')
+                            ->label('Jam Selesai Sewa')
+                            ->native(false)
+                            ->seconds(false)
+                            ->default('17:00')
+                            ->dehydrated(true)
+                            ->dehydrateStateUsing(fn ($state) => $state ? Carbon::parse($state)->format('H:i') : null)
+                            ->live()
+                            ->afterStateUpdated(function (Set $set) {
+                                $set('armada_id', null);
+                            })
+                            ->disabled(fn (Get $get) => ! $get('tanggal_selesai'))
+                            ->validationMessages([
+                                'required' => 'Jam selesai sewa wajib diisi.',
+                            ])
+                            ->required(),
+                    ]),
+                
+                // --- Bagian Armada ---
+                Select::make('armada_id')
+                    ->label('Armada yang Dipesan')
+                    ->columnSpanFull()
+                    ->placeholder(fn (Get $get) => ! $get('tanggal_mulai') || ! $get('jam_mulai') || ! $get('tanggal_selesai') || ! $get('jam_selesai')
+                        ? 'Pilih tanggal dan jam sewa terlebih dahulu'
+                        : 'Pilih armada'
+                    )
+                    ->disabled(fn (Get $get) => ! $get('tanggal_mulai') || ! $get('jam_mulai') || ! $get('tanggal_selesai') || ! $get('jam_selesai'))
+                    ->options(function (Get $get, $record) {
+                        $tanggalMulai = $get('tanggal_mulai');
+                        $jamMulai = $get('jam_mulai');
+                        $tanggalSelesai = $get('tanggal_selesai');
+                        $jamSelesai = $get('jam_selesai');
 
-                            $options = Armada::where('status', 'tersedia')
-                                ->whereDoesntHave('penyewaans', function ($query) use ($tanggalMulai, $tanggalSelesai, $record) {
-                                    $query->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
-                                        ->when($record, function ($query) use ($record) {
-                                            $query->where('id', '!=', $record->id);
-                                        })
-                                        ->whereDate('tanggal_mulai', '<=', $tanggalSelesai)
-                                        ->whereDate('tanggal_selesai', '>=', $tanggalMulai);
-                                })
-                                ->orderBy('nama_bus')
+                        if (! $tanggalMulai || ! $jamMulai || ! $tanggalSelesai || ! $jamSelesai) {
+                            return [];
+                        }
+
+                        $waktuMulai = self::combineDateTime($tanggalMulai, $jamMulai);
+                        $waktuSelesai = self::combineDateTime($tanggalSelesai, $jamSelesai);
+
+                        $options = Armada::where('status', 'tersedia')
+                            ->whereDoesntHave('penyewaans', function ($query) use ($waktuMulai, $waktuSelesai, $record) {
+                                $query->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
+                                    ->when($record, function ($query) use ($record) {
+                                        $query->where('id', '!=', $record->id);
+                                    })
+                                    ->whereRaw(
+                                        "TIMESTAMP(tanggal_mulai, COALESCE(jam_mulai, '00:00:00')) < ?",
+                                        [$waktuSelesai]
+                                    )
+                                    ->whereRaw(
+                                        "TIMESTAMP(tanggal_selesai, COALESCE(jam_selesai, '23:59:59')) > ?",
+                                        [$waktuMulai]
+                                    );
+                            })
+                            ->orderBy('nama_bus')
+                            ->pluck('nama_bus', 'id');
+
+                        if ($record && $record->armada_id) {
+                            $currentArmada = Armada::withTrashed()
+                                ->where('id', $record->armada_id)
                                 ->pluck('nama_bus', 'id');
 
-                            if ($record && $record->armada_id) {
-                                $currentArmada = Armada::withTrashed()
-                                    ->where('id', $record->armada_id)
-                                    ->pluck('nama_bus', 'id');
+                            return $currentArmada->union($options);
+                        }
 
-                                return $currentArmada->union($options);
-                            }
+                        return $options;
+                    })
+                    ->searchable()
+                    ->preload()
+                    ->live()
+                    ->exists('armadas', 'id')
+                    ->searchPrompt('Ketik nama armada')
+                    ->noOptionsMessage('Tidak ada armada yang tersedia pada waktu tersebut')
+                    ->noSearchResultsMessage('Armada tidak ditemukan')
+                    ->loadingMessage('Mencari armada yang tersedia...')
+                    ->searchingMessage('Mencari...')
+                    ->rules(function (Get $get, $record) {
+                        return [
+                            function (string $attribute, $value, \Closure $fail) use ($get, $record) {
+                                if (! $value) {
+                                    return;
+                                }
 
-                            return $options;
-                        })
-                        ->searchable()
-                        ->preload()
-                        ->live()
-                        ->exists('armadas', 'id')
-                        // ->helperText(function (Get $get, $operation) {
-                        //     if (! $get('tanggal_mulai') || ! $get('tanggal_selesai')) {
-                        //         // return 'Pilih tanggal mulai dan tanggal selesai terlebih dahulu.';
-                        //     }
+                                $bentrok = self::hasBentrokJadwal(
+                                    $value,
+                                    $get('tanggal_mulai'),
+                                    $get('jam_mulai'),
+                                    $get('tanggal_selesai'),
+                                    $get('jam_selesai'),
+                                    $record?->id
+                                );
 
-                        //     return $operation === 'edit'
-                        //         ? 'Hanya armada yang tersedia pada rentang tanggal tersebut yang ditampilkan. Armada lama tetap ditampilkan untuk menjaga data penyewaan.'
-                        //         : 'Hanya armada yang tersedia pada rentang tanggal tersebut yang ditampilkan.';
-                        // })
-                        ->searchPrompt('Ketik nama armada')
-                        ->noOptionsMessage('Tidak ada armada yang tersedia pada tanggal tersebut')
-                        ->noSearchResultsMessage('Armada tidak ditemukan')
-                        ->loadingMessage('Mencari armada yang tersedia...')
-                        ->searchingMessage('Mencari...')
-                        ->validationMessages([
-                            'required' => 'Armada wajib dipilih.',
-                            'exists' => 'Armada yang dipilih tidak valid.',
-                        ])
-                        ->required(),
-                    ]),
+                                if ($bentrok) {
+                                    $fail('Armada ini sudah memiliki penyewaan aktif pada rentang waktu tersebut.');
+                                }
+                            },
+                        ];
+                    })
+                    ->validationMessages([
+                        'required' => 'Armada wajib dipilih.',
+                        'exists' => 'Armada yang dipilih tidak valid.',
+                    ])
+                    ->required(),
 
                 // --- Detail Perjalanan ---
                 Textarea::make('alamat_penjemputan')

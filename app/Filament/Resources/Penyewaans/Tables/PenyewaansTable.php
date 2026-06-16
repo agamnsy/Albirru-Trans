@@ -23,7 +23,7 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Illuminate\Database\Eloquent\Builder;
 use Filament\Notifications\Notification;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Carbon; 
 
 class PenyewaansTable
 {
@@ -42,12 +42,22 @@ class PenyewaansTable
                     ->toggleable(false),
 
                 TextColumn::make('tanggal_mulai')
+                    ->label('Mulai Sewa')
                     ->date('d F Y')
+                    ->description(fn ($record) => $record->jam_mulai
+                        ? Carbon::parse($record->jam_mulai)->format('H:i') . ' WIB'
+                        : '-'
+                    )
                     ->toggleable(false)
                     ->sortable(),
 
                 TextColumn::make('tanggal_selesai')
+                    ->label('Selesai Sewa')
                     ->date('d F Y')
+                    ->description(fn ($record) => $record->jam_selesai
+                        ? Carbon::parse($record->jam_selesai)->format('H:i') . ' WIB'
+                        : '-'
+                    )
                     ->toggleable(false),
 
                 TextColumn::make('status')
@@ -94,23 +104,23 @@ class PenyewaansTable
                     ->tooltip(fn ($record) => $record->alamat_penjemputan)
                     ->toggleable(false),
 
-                TextColumn::make('tujuan')
-                    ->label('Tujuan Destinasi')
-                    ->limit(30)
-                    ->tooltip(fn ($record) => $record->tujuan)
-                    ->toggleable(false),
+                // TextColumn::make('tujuan')
+                //     ->label('Tujuan Destinasi')
+                //     ->limit(30)
+                //     ->tooltip(fn ($record) => $record->tujuan)
+                //     ->toggleable(false),
 
-                TextColumn::make('created_at')
-                    ->dateTime('d F Y')
-                    ->description(fn ($record) => $record->created_at->format('H:i'))
-                    ->label('Dibuat Pada')
-                    ->toggleable(false),
+                // TextColumn::make('created_at')
+                //     ->dateTime('d F Y')
+                //     ->description(fn ($record) => $record->created_at->format('H:i') . ' WIB')
+                //     ->label('Dibuat Pada')
+                //     ->toggleable(false),
 
-                TextColumn::make('updated_at')
-                    ->dateTime('d F Y')
-                    ->description(fn ($record) => $record->updated_at->format('H:i'))
-                    ->label('Terakhir Diubah')
-                    ->toggleable(false),
+                // TextColumn::make('updated_at')
+                //     ->dateTime('d F Y')
+                //     ->description(fn ($record) => $record->updated_at->format('H:i') . ' WIB')
+                //     ->label('Terakhir Diubah')
+                //     ->toggleable(false),
             ])
             ->filters([
                 SelectFilter::make('status')

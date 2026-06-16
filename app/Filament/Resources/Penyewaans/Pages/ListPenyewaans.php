@@ -22,6 +22,9 @@ class ListPenyewaans extends ListRecords
                 ->modalSubmitActionLabel('Tambah Penyewaan')
                 ->createAnother(false)
                 ->modalCancelActionLabel('Batal')
+                ->mutateFormDataUsing(function (array $data): array {            
+                    return $data;
+                })
                 ->successNotification(
                     Notification::make()
                         ->success()

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Penyewaans\Schemas;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Illuminate\Support\Carbon;
 
 class PenyewaanInfolist
 {
@@ -36,16 +37,36 @@ class PenyewaanInfolist
                             ->placeholder('-'),
 
                         TextEntry::make('tanggal_mulai')
-                            ->label('Tanggal Mulai')
+                            ->label('Mulai Sewa')
                             ->icon('heroicon-s-calendar-days')
                             ->iconColor('primary')
-                            ->date('d F Y'),
+                            ->formatStateUsing(function ($record) {
+                                $tanggal = $record->tanggal_mulai
+                                    ? $record->tanggal_mulai->translatedFormat('d F Y')
+                                    : '-';
+                        
+                                $jam = $record->jam_mulai
+                                    ? Carbon::parse($record->jam_mulai)->format('H:i') . ' WIB'
+                                    : '-';
+                        
+                                return "{$tanggal}, {$jam}";
+                            }),
 
                         TextEntry::make('tanggal_selesai')
-                            ->label('Tanggal Selesai')
+                            ->label('Selesai Sewa')
                             ->icon('heroicon-s-calendar-days')
                             ->iconColor('primary')
-                            ->date('d F Y'),
+                            ->formatStateUsing(function ($record) {
+                                $tanggal = $record->tanggal_selesai
+                                    ? $record->tanggal_selesai->translatedFormat('d F Y')
+                                    : '-';
+                        
+                                $jam = $record->jam_selesai
+                                    ? Carbon::parse($record->jam_selesai)->format('H:i') . ' WIB'
+                                    : '-';
+                        
+                                return "{$tanggal}, {$jam}";
+                            }),
 
                         TextEntry::make('status')
                             ->label('Status Penyewaan')
@@ -86,17 +107,21 @@ class PenyewaanInfolist
                 Section::make('Informasi Sistem')
                     ->description('Waktu pencatatan dan perubahan data penyewaan.')
                     ->columns(2)
-                    // ->collapsible()
-                    // ->collapsed()
                     ->schema([
                         TextEntry::make('created_at')
                             ->label('Dibuat Pada')
-                            ->dateTime('d F Y, H:i')
+                            ->formatStateUsing(fn ($state) => $state
+                                ? Carbon::parse($state)->translatedFormat('d F Y, H:i') . ' WIB'
+                                : '-'
+                            )
                             ->placeholder('-'),
 
                         TextEntry::make('updated_at')
                             ->label('Terakhir Diubah')
-                            ->dateTime('d F Y, H:i')
+                            ->formatStateUsing(fn ($state) => $state
+                                ? Carbon::parse($state)->translatedFormat('d F Y, H:i') . ' WIB'
+                                : '-'
+                            )
                             ->placeholder('-'),
                     ]),
             ]);

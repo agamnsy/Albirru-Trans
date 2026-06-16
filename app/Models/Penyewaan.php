@@ -18,7 +18,9 @@ class Penyewaan extends Model
         'pelanggan_id',
         'armada_id',
         'tanggal_mulai',
+        'jam_mulai',
         'tanggal_selesai',
+        'jam_selesai',
         'alamat_penjemputan',
         'tujuan',
         'status',
@@ -27,6 +29,8 @@ class Penyewaan extends Model
     protected $casts = [
         'tanggal_mulai' => 'date',
         'tanggal_selesai' => 'date',
+        // 'jam_mulai' => 'datetime:H:i',
+        // 'jam_selesai' => 'datetime:H:i',
     ];
 
     protected static function booted()

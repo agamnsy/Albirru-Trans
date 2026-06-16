@@ -52,7 +52,7 @@ class ArmadasTable
                     ->formatStateUsing(fn (string $state): string => match ($state) {
                         'tersedia' => 'Tersedia',
                         'maintenance' => 'Maintenance',
-                        'disewa' => 'Disewa',
+                        // 'disewa' => 'Disewa',
                         default => ucfirst($state),
                     })
                     ->color(fn (string $state): string => match ($state) {
@@ -205,7 +205,6 @@ class ArmadasTable
                         ->modalSubmitActionLabel('Ya, Hapus')
                         ->modalCancelActionLabel('Batal')
                         ->successNotification(null),
-                        // ->successNotificationTitle('Data armada berhasil dihapus'),
                     RestoreBulkAction::make()
                         ->label('Pulihkan Terpilih'),
                 ])
