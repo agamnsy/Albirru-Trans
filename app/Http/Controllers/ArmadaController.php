@@ -82,14 +82,9 @@ class ArmadaController extends Controller
             return view('armada', compact('armadas', 'tgl_mulai', 'tgl_selesai'));
         }
 
-        // Menampilkan armada yang status unitnya tersedia
-        // dan tidak memiliki penyewaan aktif yang bentrok pada tanggal tersebut.
+        // Menampilkan armada yang status unitnya tersedia.
+        // Validasi bentrok jadwal berdasarkan tanggal dan jam dilakukan saat pelanggan mengirim form pemesanan.
         $armadas = Armada::where('status', 'tersedia')
-            // ->whereDoesntHave('penyewaans', function ($query) use ($tgl_mulai, $tgl_selesai) {
-            //     $query->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
-            //         ->whereDate('tanggal_mulai', '<=', $tgl_selesai)
-            //         ->whereDate('tanggal_selesai', '>=', $tgl_mulai);
-            // })
             ->get();
 
         return view('armada', compact('armadas', 'tgl_mulai', 'tgl_selesai'));
@@ -205,10 +200,20 @@ class ArmadaController extends Controller
             // Cari atau buat pelanggan berdasarkan nomor HP.
             // Catatan: nanti kalau pelanggan pakai soft delete dan nomor HP lama muncul lagi,
             // bisa kita sesuaikan agar data pelanggan lama otomatis restore.
-            $pelanggan = Pelanggan::firstOrCreate(
-                ['no_hp' => $request->nomor_hp],
-                ['nama' => $request->nama_lengkap]
-            );
+            $pelanggan = Pelanggan::withTrashed()
+                ->where('no_hp', $request->nomor_hp)
+                ->first();
+
+            if ($pelanggan) {
+                if ($pelanggan->trashed()) {
+                    $pelanggan->restore();
+                }
+            } else {
+                $pelanggan = Pelanggan::create([
+                    'nama' => $request->nama_lengkap,
+                    'no_hp' => $request->nomor_hp,
+                ]);
+            }
 
             // Simpan penyewaan.
             // Tidak ada update status armada menjadi disewa di sini.

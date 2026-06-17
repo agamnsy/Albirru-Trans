@@ -133,8 +133,13 @@ class ArmadasTable
                     ->color('danger')
                     ->size('lg')
                     ->tooltip('Hapus')
+                    ->visible(function ($record) {
+                        return ! $record->penyewaans()
+                            ->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
+                            ->exists();
+                    })
                     ->before(function ($record, $action) {
-
+                
                         $hasActiveBooking = $record->penyewaans()
                             ->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
                             ->exists();

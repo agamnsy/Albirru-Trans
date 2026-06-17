@@ -102,13 +102,24 @@ class AktivitasPerjalanansRelationManager extends RelationManager
                             ->label('Foto Dokumentasi')
                             ->multiple()
                             ->maxFiles(5)
+                            ->minFiles(fn ($record) => $record?->status === 'sampai_garasi' ? 1 : null)
+                            ->required(fn ($record) => $record?->status === 'sampai_garasi')
                             ->disk('public')
                             ->directory('aktivitas-perjalanan')
                             ->image()
                             ->panelLayout('grid')
                             ->imagePreviewHeight('140')
-                            ->helperText('Tambah atau hapus foto untuk memperbarui dokumentasi.')
-                            ->nullable(),
+                            ->helperText(function ($record) {
+                                if ($record?->status === 'sampai_garasi') {
+                                    return 'Foto wajib tersedia minimal 1. Anda boleh mengganti foto, tetapi tidak boleh mengosongkannya.';
+                                }
+
+                                return 'Tambah atau hapus foto untuk memperbarui dokumentasi.';
+                            })
+                            ->validationMessages([
+                                'required' => 'Foto dokumentasi wajib diunggah untuk status sampai garasi.',
+                                'minFiles' => 'Foto dokumentasi tidak boleh kosong untuk status sampai garasi.',
+                            ]),
 
                         Textarea::make('catatan')
                             ->label('Catatan Perjalanan')
