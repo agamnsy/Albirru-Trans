@@ -1,0 +1,25 @@
+{
+    "name": "Albirru Trans Admin",
+    "short_name": "Albirru Admin",
+    "description": "Aplikasi internal admin Albirru Trans untuk pengelolaan armada, penyewaan, pelanggan, dan operasional.",
+    "start_url": "/admin",
+    "scope": "/admin",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#196FEB",
+    "orientation": "portrait-primary",
+    "icons": [
+        {
+            "src": "/logo/logo-192-manifest.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/logo/logo-512-manifest.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        }
+    ]
+}

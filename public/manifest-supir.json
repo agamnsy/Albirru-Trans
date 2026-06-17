@@ -1,0 +1,25 @@
+{
+    "name": "Albirru Trans Supir",
+    "short_name": "Albirru Supir",
+    "description": "Aplikasi internal supir Albirru Trans untuk melihat tugas, memperbarui status perjalanan, dan mengunggah dokumentasi.",
+    "start_url": "/supir",
+    "scope": "/supir",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#196FEB",
+    "orientation": "portrait-primary",
+    "icons": [
+        {
+            "src": "/logo/logo-192-manifest.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/logo/logo-512-manifest.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        }
+    ]
+}

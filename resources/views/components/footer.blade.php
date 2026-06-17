@@ -3,7 +3,7 @@
         <div>
             <a href="/" class="inline-flex items-center justify-center md:justify-start">
                 <img 
-                    src="{{ asset('logo/horizontal-light.png') }}" 
+                    src="{{ asset('logo/horizontal-light.svg') }}" 
                     alt="Albirru Trans"
                     class="h-7 lg:h-8 w-auto object-contain"
                 >

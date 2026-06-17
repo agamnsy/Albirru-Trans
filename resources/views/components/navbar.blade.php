@@ -17,7 +17,7 @@
         {{-- LOGO --}}
         <a href="/" class="flex items-center">
             <img 
-                src="{{ asset('logo/horizontal-light.png') }}" 
+                src="{{ asset('logo/horizontal-light.svg') }}" 
                 alt="Albirru Trans"
                 class="h-7 lg:h-8 w-auto object-contain"
             >
