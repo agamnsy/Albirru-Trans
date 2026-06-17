@@ -1,4 +1,6 @@
-@extends('layouts.app') {{-- Merujuk ke folder layouts file app.blade.php --}}
+@extends('layouts.app')
+
+@section('title', 'Beranda')
 
 @section('content')
 

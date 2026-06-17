@@ -36,6 +36,10 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->font('Plus Jakarta Sans')
             ->login()
+            ->brandLogo(asset('logo/horizontal-light.png'))
+            ->darkModeBrandLogo(asset('logo/horizontal-dark.png'))
+            ->brandLogoHeight('2rem')
+            ->favicon(asset('logo/logo-512.png'))
             ->brandName('ALBIRRU TRANS')
             ->globalSearch(false)
             ->userMenuItems([

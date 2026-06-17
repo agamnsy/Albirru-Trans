@@ -1,5 +1,7 @@
 @extends('layouts.app')
 
+@section('title', 'Detail Armada')
+
 @section('content')
 <div class="bg-white min-h-screen pb-24">
     <nav class="py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
