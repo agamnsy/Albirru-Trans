@@ -58,26 +58,32 @@ class ArmadasTable
                     ->color(fn (string $state): string => match ($state) {
                         'tersedia' => 'success',
                         'maintenance' => 'warning',
-                        'disewa' => 'danger',
+                        // 'disewa' => 'danger',
                         default => 'gray',
                     })
                     ->size('xl')
                     ->toggleable(false),
 
                 TextColumn::make('status_hari_ini')
-                    ->label('Status Hari Ini')
+                    ->label('Status Saat Ini')
                     ->badge()
                     ->getStateUsing(function ($record) {
                         if ($record->status === 'maintenance') {
                             return 'Tidak Aktif';
                         }
                 
-                        $today = Carbon::today();
+                        $now = Carbon::now();
                 
                         $sedangDisewa = $record->penyewaans()
                             ->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
-                            ->whereDate('tanggal_mulai', '<=', $today)
-                            ->whereDate('tanggal_selesai', '>=', $today)
+                            ->whereRaw(
+                                "TIMESTAMP(tanggal_mulai, COALESCE(jam_mulai, '00:00:00')) <= ?",
+                                [$now]
+                            )
+                            ->whereRaw(
+                                "TIMESTAMP(tanggal_selesai, COALESCE(jam_selesai, '23:59:59')) >= ?",
+                                [$now]
+                            )
                             ->exists();
                 
                         return $sedangDisewa ? 'Sedang Disewa' : 'Tidak Disewa';

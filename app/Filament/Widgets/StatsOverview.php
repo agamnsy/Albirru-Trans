@@ -7,6 +7,7 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
 use App\Models\Armada;
 use App\Models\Pelanggan;
 use App\Models\Penyewaan;
+use Carbon\Carbon;
 
 class StatsOverview extends StatsOverviewWidget
 {
@@ -18,37 +19,51 @@ class StatsOverview extends StatsOverviewWidget
     
     protected function getStats(): array
     {
+        $now = Carbon::now();
+
         $dataPenyewaan = collect(range(6, 0))->map(function ($days) {
             return Penyewaan::whereDate('created_at', now()->subDays($days))->count();
         })->toArray();
 
-        $armadaTersediaHariIni = Armada::where('status', 'tersedia')
-            ->whereDoesntHave('penyewaans', function ($query) {
+        $armadaTersediaSaatIni = Armada::where('status', 'tersedia')
+            ->whereDoesntHave('penyewaans', function ($query) use ($now) {
                 $query->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
-                    ->whereDate('tanggal_mulai', '<=', today())
-                    ->whereDate('tanggal_selesai', '>=', today());
+                    ->whereRaw(
+                        "TIMESTAMP(tanggal_mulai, COALESCE(jam_mulai, '00:00:00')) <= ?",
+                        [$now]
+                    )
+                    ->whereRaw(
+                        "TIMESTAMP(tanggal_selesai, COALESCE(jam_selesai, '23:59:59')) >= ?",
+                        [$now]
+                    );
             })
             ->count();
 
-        $armadaDisewaHariIni = Armada::where('status', 'tersedia')
-            ->whereHas('penyewaans', function ($query) {
+        $armadaDisewaSaatIni = Armada::where('status', 'tersedia')
+            ->whereHas('penyewaans', function ($query) use ($now) {
                 $query->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
-                    ->whereDate('tanggal_mulai', '<=', today())
-                    ->whereDate('tanggal_selesai', '>=', today());
+                    ->whereRaw(
+                        "TIMESTAMP(tanggal_mulai, COALESCE(jam_mulai, '00:00:00')) <= ?",
+                        [$now]
+                    )
+                    ->whereRaw(
+                        "TIMESTAMP(tanggal_selesai, COALESCE(jam_selesai, '23:59:59')) >= ?",
+                        [$now]
+                    );
             })
             ->count();
-        
+
         return [
             Stat::make('Total Pelanggan', Pelanggan::count())
                 ->description('Pelanggan terdaftar')
                 ->color('primary'),
 
-            Stat::make('Armada Tersedia Hari Ini', $armadaTersediaHariIni)
-                ->description('Siap jalan')
+            Stat::make('Armada Tersedia Saat Ini', $armadaTersediaSaatIni)
+                ->description('Siap digunakan saat ini')
                 ->color('success'),
 
-            Stat::make('Armada Disewa Hari Ini', $armadaDisewaHariIni)
-                ->description('Penyewaan aktif hari ini')
+            Stat::make('Armada Disewa Saat Ini', $armadaDisewaSaatIni)
+                ->description('Sedang dalam penyewaan aktif')
                 ->color('danger'),
 
             Stat::make('Total Penyewaan', Penyewaan::count())

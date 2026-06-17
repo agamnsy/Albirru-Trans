@@ -4,6 +4,7 @@ namespace App\Filament\Widgets;
 
 use App\Models\Armada;
 use Filament\Widgets\ChartWidget;
+use Carbon\Carbon;
 
 class ArmadaStatusChart extends ChartWidget
 {
@@ -15,19 +16,33 @@ class ArmadaStatusChart extends ChartWidget
 
     protected function getData(): array
     {
+        $now = Carbon::now();
+
         $tersedia = Armada::where('status', 'tersedia')
-            ->whereDoesntHave('penyewaans', function ($query) {
+            ->whereDoesntHave('penyewaans', function ($query) use ($now) {
                 $query->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
-                    ->whereDate('tanggal_mulai', '<=', today())
-                    ->whereDate('tanggal_selesai', '>=', today());
+                    ->whereRaw(
+                        "TIMESTAMP(tanggal_mulai, COALESCE(jam_mulai, '00:00:00')) <= ?",
+                        [$now]
+                    )
+                    ->whereRaw(
+                        "TIMESTAMP(tanggal_selesai, COALESCE(jam_selesai, '23:59:59')) >= ?",
+                        [$now]
+                    );
             })
             ->count();
 
         $sedangDisewa = Armada::where('status', 'tersedia')
-            ->whereHas('penyewaans', function ($query) {
+            ->whereHas('penyewaans', function ($query) use ($now) {
                 $query->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
-                    ->whereDate('tanggal_mulai', '<=', today())
-                    ->whereDate('tanggal_selesai', '>=', today());
+                    ->whereRaw(
+                        "TIMESTAMP(tanggal_mulai, COALESCE(jam_mulai, '00:00:00')) <= ?",
+                        [$now]
+                    )
+                    ->whereRaw(
+                        "TIMESTAMP(tanggal_selesai, COALESCE(jam_selesai, '23:59:59')) >= ?",
+                        [$now]
+                    );
             })
             ->count();
 
@@ -46,8 +61,8 @@ class ArmadaStatusChart extends ChartWidget
                 ],
             ],
             'labels' => [
-                'Tersedia Hari Ini',
-                'Sedang Disewa Hari Ini',
+                'Tersedia Saat Ini',
+                'Sedang Disewa Saat Ini',
                 'Maintenance',
             ],
         ];
