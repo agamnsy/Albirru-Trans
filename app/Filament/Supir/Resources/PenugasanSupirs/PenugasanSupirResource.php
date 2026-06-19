@@ -19,6 +19,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Carbon\Carbon;
 
 class PenugasanSupirResource extends Resource
 {
@@ -120,13 +121,41 @@ class PenugasanSupirResource extends Resource
                         ->label('Tanggal Mulai')
                         ->icon('heroicon-s-calendar-days')
                         ->iconColor('primary')
-                        ->date('d F Y'),
+                        ->formatStateUsing(function ($record) {
+                            if (! $record->penyewaan?->tanggal_mulai) {
+                                return '-';
+                            }
+                    
+                            $tanggal = \Carbon\Carbon::parse($record->penyewaan->tanggal_mulai)
+                                ->locale('id')
+                                ->translatedFormat('d F Y');
+                    
+                            $jam = $record->penyewaan?->jam_mulai
+                                ? \Carbon\Carbon::parse($record->penyewaan->jam_mulai)->format('H:i') . ' WIB'
+                                : '-';
+                    
+                            return "{$tanggal}, {$jam}";
+                        }),
 
                     TextEntry::make('penyewaan.tanggal_selesai')
                         ->label('Tanggal Selesai')
                         ->icon('heroicon-s-calendar-days')
                         ->iconColor('primary')
-                        ->date('d F Y'),
+                        ->formatStateUsing(function ($record) {
+                            if (! $record->penyewaan?->tanggal_selesai) {
+                                return '-';
+                            }
+                    
+                            $tanggal = \Carbon\Carbon::parse($record->penyewaan->tanggal_selesai)
+                                ->locale('id')
+                                ->translatedFormat('d F Y');
+                    
+                            $jam = $record->penyewaan?->jam_selesai
+                                ? \Carbon\Carbon::parse($record->penyewaan->jam_selesai)->format('H:i') . ' WIB'
+                                : '-';
+                    
+                            return "{$tanggal}, {$jam}";
+                        }),
 
                     TextEntry::make('penyewaan.status')
                         ->label('Status Penyewaan')

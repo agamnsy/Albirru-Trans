@@ -3,6 +3,9 @@
 namespace App\Filament\Supir\Resources\PenugasanSupirs\Tables;
 
 use App\Models\AktivitasPerjalanan;
+use App\Models\Penyewaan;
+
+use Illuminate\Support\Facades\DB;
 
 use Filament\Actions\Action;
 use Filament\Actions\ViewAction;
@@ -12,6 +15,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Forms\Components\FileUpload;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Carbon\Carbon;
 
 class PenugasanSupirsTable
 {
@@ -28,12 +32,22 @@ class PenugasanSupirsTable
                     ->searchable(),
 
                 TextColumn::make('penyewaan.tanggal_mulai')
-                    ->label('Tanggal Mulai')
-                    ->date('d F Y'),
+                    ->label('Mulai Sewa')
+                    ->date('d F Y')
+                    ->description(fn ($record) => $record->penyewaan?->jam_mulai
+                        ? Carbon::parse($record->penyewaan->jam_mulai)->format('H:i') . ' WIB'
+                        : '-'
+                    ),
+                    // ->sortable(),
 
                 TextColumn::make('penyewaan.tanggal_selesai')
-                    ->label('Tanggal Selesai')
-                    ->date('d F Y'),
+                    ->label('Selesai Sewa')
+                    ->date('d F Y')
+                    ->description(fn ($record) => $record->penyewaan?->jam_selesai
+                        ? Carbon::parse($record->penyewaan->jam_selesai)->format('H:i') . ' WIB'
+                        : '-'
+                    ),
+                    // ->sortable(),
 
                 TextColumn::make('penyewaan.tujuan')
                     ->label('Tujuan Destinasi')
@@ -129,6 +143,7 @@ class PenugasanSupirsTable
                     ->dateTime('d F Y')
                     ->description(fn ($record) => $record->assigned_at?->format('H:i')),
             ])
+            
             ->filters([
                 SelectFilter::make('status')
                     ->label('Status Tugas')
@@ -140,6 +155,62 @@ class PenugasanSupirsTable
                         'ditolak' => 'Ditolak',
                         'dibatalkan' => 'Dibatalkan',
                     ]),
+            
+                SelectFilter::make('bulan')
+                    ->label('Bulan')
+                    ->multiple()
+                    ->native(false)
+                    ->options([
+                        '01' => 'Januari',
+                        '02' => 'Februari',
+                        '03' => 'Maret',
+                        '04' => 'April',
+                        '05' => 'Mei',
+                        '06' => 'Juni',
+                        '07' => 'Juli',
+                        '08' => 'Agustus',
+                        '09' => 'September',
+                        '10' => 'Oktober',
+                        '11' => 'November',
+                        '12' => 'Desember',
+                    ])
+                    ->query(function ($query, array $data) {
+                        $values = $data['values'] ?? [];
+            
+                        if (empty($values)) {
+                            return $query;
+                        }
+            
+                        $months = array_map('intval', $values);
+            
+                        return $query->whereHas('penyewaan', function ($query) use ($months) {
+                            $query->whereIn(
+                                DB::raw('MONTH(tanggal_mulai)'),
+                                $months
+                            );
+                        });
+                    }),
+            
+                SelectFilter::make('tahun')
+                    ->label('Tahun')
+                    ->native(false)
+                    ->options(function () {
+                        return Penyewaan::query()
+                            ->selectRaw('YEAR(tanggal_mulai) as tahun')
+                            ->distinct()
+                            ->orderByDesc('tahun')
+                            ->pluck('tahun', 'tahun')
+                            ->toArray();
+                    })
+                    ->query(function ($query, array $data) {
+                        if (blank($data['value'] ?? null)) {
+                            return $query;
+                        }
+            
+                        return $query->whereHas('penyewaan', function ($query) use ($data) {
+                            $query->whereYear('tanggal_mulai', $data['value']);
+                        });
+                    }),
             ])
 
             ->recordActions([
