@@ -5,6 +5,7 @@ namespace App\Filament\Supir\Resources\PenugasanSupirs\Tables;
 use App\Models\AktivitasPerjalanan;
 use App\Models\Penyewaan;
 use App\Models\PenugasanSupir;
+use App\Models\User;
 
 use Illuminate\Support\Facades\DB;
 
@@ -304,22 +305,49 @@ class PenugasanSupirsTable
                             return;
                         }
 
-                        $record->update([
-                            'status' => 'diterima',
-                            'responded_at' => now(),
-                        ]);
+                        if (self::supirBentrokJadwal($record)) {
+                            Notification::make()
+                                ->title('Tugas tidak dapat diterima')
+                                ->body('Anda sudah memiliki tugas lain pada jadwal sewa yang bentrok.')
+                                ->danger()
+                                ->send();
+                    
+                            return;
+                        }
 
-                        $record->penyewaan->update([
-                            'status' => 'berjalan',
-                        ]);
+                        $supir = User::find($record->supir_id);
 
-                        $record->supir->update([
-                            'status' => 'bertugas',
-                        ]);
+                        if (! $supir) {
+                            Notification::make()
+                                ->title('Data supir tidak ditemukan')
+                                ->body('Data supir pada penugasan ini tidak ditemukan.')
+                                ->danger()
+                                ->send();
+
+                            return;
+                        }
+
+                        DB::transaction(function () use ($record, $supir) {
+                            $record->update([
+                                'status' => 'diterima',
+                                'responded_at' => now(),
+                            ]);
+
+                            $record->penyewaan->update([
+                                'status' => 'berjalan',
+                            ]);
+
+                            $supir->forceFill([
+                                'status' => 'bertugas',
+                            ])->save();
+                        });
+
+                        $record->refresh();
+                        $supir->refresh();
 
                         Notification::make()
                             ->title('Tugas diterima')
-                            ->body('Status penyewaan berhasil diubah menjadi berjalan.')
+                            ->body('Status penyewaan berhasil diubah menjadi berjalan. Status supir sekarang: ' . $supir->status)
                             ->success()
                             ->send();
                     }),
