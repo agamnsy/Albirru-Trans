@@ -114,6 +114,7 @@ class PenyewaanForm
 
                         return $action
                             ->modalHeading('Tambah Pelanggan Baru')
+                            ->modalWidth('md')
                             ->modalSubmitActionLabel('Tambah Pelanggan')
                             ->modalCancelActionLabel('Batal');
                     })
@@ -131,18 +132,67 @@ class PenyewaanForm
                                 ->required(),
 
                             TextInput::make('no_hp')
+                                ->label('Nomor HP')
+                                ->prefix('+62')
+                                ->placeholder('81234567890')
+                                ->helperText('Masukkan nomor tanpa angka 0 di depan.')
                                 ->tel()
-                                ->placeholder('Cth: 081234567890')
                                 ->required()
-                                ->maxLength(13)
+                                ->maxLength(12)
                                 ->numeric()
+                                ->dehydrateStateUsing(function ($state) {
+                                    if (! $state) {
+                                        return null;
+                                    }
+                            
+                                    $number = preg_replace('/[^0-9]/', '', $state);
+                            
+                                    if (str_starts_with($number, '08')) {
+                                        return $number;
+                                    }
+                            
+                                    if (str_starts_with($number, '62')) {
+                                        return '0' . substr($number, 2);
+                                    }
+                            
+                                    if (str_starts_with($number, '8')) {
+                                        return '0' . $number;
+                                    }
+                            
+                                    return $number;
+                                })
+                                ->rules([
+                                    function (string $attribute, $value, \Closure $fail) {
+                                        $number = preg_replace('/[^0-9]/', '', $value);
+                            
+                                        if (str_starts_with($number, '08')) {
+                                            $normalized = $number;
+                                        } elseif (str_starts_with($number, '62')) {
+                                            $normalized = '0' . substr($number, 2);
+                                        } elseif (str_starts_with($number, '8')) {
+                                            $normalized = '0' . $number;
+                                        } else {
+                                            $fail('Format nomor HP tidak valid. Gunakan nomor Indonesia, contoh: 81234567890.');
+                                            return;
+                                        }
+                            
+                                        if (! preg_match('/^08[0-9]{8,11}$/', $normalized)) {
+                                            $fail('Format nomor HP tidak valid. Gunakan nomor Indonesia, contoh: 81234567890.');
+                                            return;
+                                        }
+                            
+                                        $exists = Pelanggan::where('no_hp', $normalized)->exists();
+                            
+                                        if ($exists) {
+                                            $fail('Nomor HP ini sudah terdaftar di sistem.');
+                                        }
+                                    },
+                                ])
                                 ->validationMessages([
-                                    'maxLength' => 'Nomor HP tidak boleh lebih dari 13 digit',
-                                    'unique' => 'Nomor HP ini sudah terdaftar di sistem',
+                                    'maxLength' => 'Nomor HP tidak boleh lebih dari 12 digit setelah +62',
                                     'required' => 'Nomor HP wajib diisi',
                                     'tel' => 'Format nomor HP tidak valid',
                                 ])
-                                ->unique('pelanggans', 'no_hp'),
                         ];
                     })
                     ->createOptionUsing(function (array $data) {
@@ -354,8 +404,6 @@ class PenyewaanForm
                         if (! $record) {
                             return [
                                 'pending' => 'Pending',
-                                'dikonfirmasi' => 'Dikonfirmasi',
-                                'berjalan' => 'Berjalan',
                                 'selesai' => 'Selesai',
                                 'dibatalkan' => 'Dibatalkan',
                             ];

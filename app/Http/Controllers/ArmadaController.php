@@ -70,6 +70,29 @@ class ArmadaController extends Controller
             ->exists();
     }
 
+    private function normalizePhoneNumber($phone): ?string
+    {
+        if (! $phone) {
+            return null;
+        }
+
+        $number = preg_replace('/[^0-9]/', '', $phone);
+
+        if (str_starts_with($number, '08')) {
+            return $number;
+        }
+
+        if (str_starts_with($number, '62')) {
+            return '0' . substr($number, 2);
+        }
+
+        if (str_starts_with($number, '8')) {
+            return '0' . $number;
+        }
+
+        return $number;
+    }
+
     public function index(Request $request)
     {
         $tgl_mulai = $request->query('tgl_mulai');
@@ -172,6 +195,12 @@ class ArmadaController extends Controller
         
         $validator->validate();
 
+        $nomorHp = $this->normalizePhoneNumber($request->nomor_hp);
+
+        $request->merge([
+            'nomor_hp' => $nomorHp,
+        ]);
+
         try {
             DB::beginTransaction();
 
@@ -201,7 +230,7 @@ class ArmadaController extends Controller
             // Catatan: nanti kalau pelanggan pakai soft delete dan nomor HP lama muncul lagi,
             // bisa kita sesuaikan agar data pelanggan lama otomatis restore.
             $pelanggan = Pelanggan::withTrashed()
-                ->where('no_hp', $request->nomor_hp)
+                ->where('no_hp', $nomorHp)
                 ->first();
 
             if ($pelanggan) {
@@ -211,7 +240,7 @@ class ArmadaController extends Controller
             } else {
                 $pelanggan = Pelanggan::create([
                     'nama' => $request->nama_lengkap,
-                    'no_hp' => $request->nomor_hp,
+                    'no_hp' => $nomorHp,
                 ]);
             }
 
