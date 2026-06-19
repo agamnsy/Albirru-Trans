@@ -4,6 +4,7 @@ namespace App\Filament\Supir\Resources\PenugasanSupirs\Tables;
 
 use App\Models\AktivitasPerjalanan;
 use App\Models\Penyewaan;
+use App\Models\PenugasanSupir;
 
 use Illuminate\Support\Facades\DB;
 
@@ -19,6 +20,71 @@ use Carbon\Carbon;
 
 class PenugasanSupirsTable
 {
+    private static function getWaktuMulai($penyewaan): string
+    {
+        $tanggal = Carbon::parse($penyewaan->tanggal_mulai)->format('Y-m-d');
+
+        $jam = $penyewaan->jam_mulai
+            ? Carbon::parse($penyewaan->jam_mulai)->format('H:i:s')
+            : '00:00:00';
+
+        return "{$tanggal} {$jam}";
+    }
+
+    private static function getWaktuSelesai($penyewaan): string
+    {
+        $tanggal = Carbon::parse($penyewaan->tanggal_selesai)->format('Y-m-d');
+
+        $jam = $penyewaan->jam_selesai
+            ? Carbon::parse($penyewaan->jam_selesai)->format('H:i:s')
+            : '23:59:59';
+
+        return "{$tanggal} {$jam}";
+    }
+
+    private static function supirBentrokJadwal($record): bool
+    {
+        $penyewaan = $record->penyewaan;
+
+        if (! $penyewaan) {
+            return false;
+        }
+
+        $waktuMulai = self::getWaktuMulai($penyewaan);
+        $waktuSelesai = self::getWaktuSelesai($penyewaan);
+
+        return PenugasanSupir::query()
+            ->where('supir_id', $record->supir_id)
+            ->where('id', '!=', $record->id)
+            ->whereIn('status', ['ditugaskan', 'diterima'])
+            ->whereHas('penyewaan', function ($query) use ($penyewaan, $waktuMulai, $waktuSelesai) {
+                $query
+                    ->where('id', '!=', $penyewaan->id)
+                    ->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
+                    ->whereRaw(
+                        "TIMESTAMP(tanggal_mulai, COALESCE(jam_mulai, '00:00:00')) < ?",
+                        [$waktuSelesai]
+                    )
+                    ->whereRaw(
+                        "TIMESTAMP(tanggal_selesai, COALESCE(jam_selesai, '23:59:59')) > ?",
+                        [$waktuMulai]
+                    );
+            })
+            ->exists();
+    }
+
+    private static function supirMasihMemilikiTugasAktif($record): bool
+    {
+        return PenugasanSupir::query()
+            ->where('supir_id', $record->supir_id)
+            ->where('id', '!=', $record->id)
+            ->where('status', 'diterima')
+            ->whereHas('penyewaan', function ($query) {
+                $query->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan']);
+            })
+            ->exists();
+    }
+
     public static function configure(Table $table): Table
     {
         return $table
@@ -228,6 +294,16 @@ class PenugasanSupirsTable
                     ->modalSubmitActionLabel('Ya, Terima')
                     ->modalCancelActionLabel('Batal')
                     ->action(function ($record) {
+                        if (self::supirMasihMemilikiTugasAktif($record)) {
+                            Notification::make()
+                                ->title('Tugas tidak dapat diterima')
+                                ->body('Anda masih memiliki penyewaan lain yang belum selesai. Selesaikan penyewaan sebelumnya terlebih dahulu sebelum menerima tugas baru.')
+                                ->danger()
+                                ->send();
+                        
+                            return;
+                        }
+
                         $record->update([
                             'status' => 'diterima',
                             'responded_at' => now(),
@@ -275,7 +351,18 @@ class PenugasanSupirsTable
                             'alasan_penolakan' => $data['alasan_penolakan'],
                             'responded_at' => now(),
                         ]);
-
+                    
+                        $punyaSupirAktifLain = $record->penyewaan->penugasanSupirs()
+                            ->where('id', '!=', $record->id)
+                            ->whereIn('status', ['ditugaskan', 'diterima'])
+                            ->exists();
+                    
+                        if (! $punyaSupirAktifLain && $record->penyewaan->status === 'dikonfirmasi') {
+                            $record->penyewaan->update([
+                                'status' => 'pending',
+                            ]);
+                        }
+                    
                         Notification::make()
                             ->title('Tugas ditolak')
                             ->body('Alasan penolakan berhasil dikirim ke admin.')
@@ -481,7 +568,21 @@ class PenugasanSupirsTable
                         $record->penyewaan->update([
                             'status' => 'selesai',
                         ]);
-                
+                    
+                        $masihPunyaTugasAktif = $record->supir->penugasanSupirs()
+                            ->where('id', '!=', $record->id)
+                            ->whereIn('status', ['ditugaskan', 'diterima'])
+                            ->whereHas('penyewaan', function ($query) {
+                                $query->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan']);
+                            })
+                            ->exists();
+                    
+                        if (! $masihPunyaTugasAktif) {
+                            $record->supir->update([
+                                'status' => 'aktif',
+                            ]);
+                        }
+                    
                         Notification::make()
                             ->success()
                             ->title('Penyewaan selesai')
