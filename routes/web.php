@@ -26,6 +26,15 @@ Route::get('/galeri', function () {
 
 });
 
+Route::get('/debug', function () {
+    return [
+        'secure' => request()->secure(),
+        'scheme' => request()->getScheme(),
+        'host' => request()->getHost(),
+        'app_url' => config('app.url'),
+    ];
+});
+
 
 // Route::get('/armada/detail', function () {
 //     return view('detail');
