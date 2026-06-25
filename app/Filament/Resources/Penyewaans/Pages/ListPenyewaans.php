@@ -7,7 +7,6 @@ use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Notifications\Notification;
 
-
 class ListPenyewaans extends ListRecords
 {
     protected static string $resource = PenyewaanResource::class;
@@ -23,6 +22,9 @@ class ListPenyewaans extends ListRecords
                 ->modalSubmitActionLabel('Tambah Penyewaan')
                 ->createAnother(false)
                 ->modalCancelActionLabel('Batal')
+                ->mutateFormDataUsing(function (array $data): array {            
+                    return $data;
+                })
                 ->successNotification(
                     Notification::make()
                         ->success()
@@ -30,11 +32,7 @@ class ListPenyewaans extends ListRecords
                         ->body('Berhasil menambahkan penyewaan baru')
                 )
                 ->stickyModalHeader()
-                ->stickyModalFooter()
-                // Penting: Pindahkan logika update status armada ke sini jika di Model belum ada
-                ->after(function ($record) {
-                    $record->armada->update(['status' => 'disewa']);
-                }),
+                ->stickyModalFooter(),
         ];
     }
 
@@ -47,6 +45,4 @@ class ListPenyewaans extends ListRecords
     {
         return [];
     }
-
-
 }

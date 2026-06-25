@@ -12,11 +12,15 @@
 >
 
     {{-- NAVBAR --}}
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between">
 
         {{-- LOGO --}}
-        <a href="/" class="text-2xl font-extrabold text-albirru-blue tracking-tight">
-            ALBIRRU TRANS
+        <a href="/" class="flex items-center">
+            <img 
+                src="{{ asset('logo/horizontal-light.svg') }}" 
+                alt="Albirru Trans"
+                class="h-7 lg:h-8 w-auto object-contain"
+            >
         </a>
 
         {{-- DESKTOP MENU --}}

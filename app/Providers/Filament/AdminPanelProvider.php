@@ -24,6 +24,8 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Filament\Support\Icons\Heroicon;
 use Filament\Pages\Auth\EditProfile;
 use BackedEnum;
+use Filament\View\PanelsRenderHook;
+use Illuminate\Support\HtmlString;
 
 class AdminPanelProvider extends PanelProvider
 {
@@ -36,6 +38,10 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->font('Plus Jakarta Sans')
             ->login()
+            ->brandLogo(asset('logo/horizontal-light.svg'))
+            ->darkModeBrandLogo(asset('logo/horizontal-dark.svg'))
+            ->brandLogoHeight('1.8rem')
+            ->favicon(asset('logo/logo-512.svg'))
             ->brandName('ALBIRRU TRANS')
             ->globalSearch(false)
             ->userMenuItems([
@@ -75,23 +81,44 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->renderHook(
                 'panels::head.end',
-                fn () => new \Illuminate\Support\HtmlString("
+                fn () => new \Illuminate\Support\HtmlString('
+                    <link rel="manifest" href="/manifest-admin.json">
+                    <meta name="theme-color" content="#196FEB">
+                    <meta name="mobile-web-app-capable" content="yes">
+                    <meta name="apple-mobile-web-app-capable" content="yes">
+                    <meta name="apple-mobile-web-app-title" content="Albirru Admin">
+                    <link rel="apple-touch-icon" href="/logo/logo-svg.png">
+            
                     <style>
                         .fi-sidebar-item-active a {
                             background-color: #196FEB !important;
                             color: white !important;
                             border-radius: 0.5rem;
                         }
-    
+            
                         .fi-sidebar-item-active a svg {
                             color: white !important;
                         }
-
+            
                         .fi-sidebar-item-active a:hover {
                             filter: brightness(110%);
                         }
                     </style>
-                "),
-            );;
+            
+                    <script>
+                        if ("serviceWorker" in navigator) {
+                            window.addEventListener("load", function () {
+                                navigator.serviceWorker.register("/service-worker.js")
+                                    .then(function () {
+                                        console.log("Service Worker registered");
+                                    })
+                                    .catch(function (error) {
+                                        console.log("Service Worker registration failed:", error);
+                                    });
+                            });
+                        }
+                    </script>
+                '),
+                    );
     }
 }

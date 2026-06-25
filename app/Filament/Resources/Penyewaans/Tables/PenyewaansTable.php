@@ -23,10 +23,61 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Illuminate\Database\Eloquent\Builder;
 use Filament\Notifications\Notification;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Carbon; 
+use Illuminate\Support\Facades\DB;
 
 class PenyewaansTable
 {
+    private static function getWaktuMulai($penyewaan): string
+    {
+        $tanggal = Carbon::parse($penyewaan->tanggal_mulai)->format('Y-m-d');
+
+        $jam = $penyewaan->jam_mulai
+            ? Carbon::parse($penyewaan->jam_mulai)->format('H:i:s')
+            : '00:00:00';
+
+        return "{$tanggal} {$jam}";
+    }
+
+    private static function getWaktuSelesai($penyewaan): string
+    {
+        $tanggal = Carbon::parse($penyewaan->tanggal_selesai)->format('Y-m-d');
+
+        $jam = $penyewaan->jam_selesai
+            ? Carbon::parse($penyewaan->jam_selesai)->format('H:i:s')
+            : '23:59:59';
+
+        return "{$tanggal} {$jam}";
+    }
+
+    private static function supirBentrokJadwal($supirId, $penyewaan): bool
+    {
+        if (! $supirId || ! $penyewaan) {
+            return false;
+        }
+
+        $waktuMulai = self::getWaktuMulai($penyewaan);
+        $waktuSelesai = self::getWaktuSelesai($penyewaan);
+
+        return PenugasanSupir::query()
+            ->where('supir_id', $supirId)
+            ->whereIn('status', ['ditugaskan', 'diterima'])
+            ->whereHas('penyewaan', function ($query) use ($penyewaan, $waktuMulai, $waktuSelesai) {
+                $query
+                    ->where('id', '!=', $penyewaan->id)
+                    ->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
+                    ->whereRaw(
+                        "TIMESTAMP(tanggal_mulai, COALESCE(jam_mulai, '00:00:00')) < ?",
+                        [$waktuSelesai]
+                    )
+                    ->whereRaw(
+                        "TIMESTAMP(tanggal_selesai, COALESCE(jam_selesai, '23:59:59')) > ?",
+                        [$waktuMulai]
+                    );
+            })
+            ->exists();
+    }
+
     public static function configure(Table $table): Table
     {
         return $table
@@ -42,12 +93,22 @@ class PenyewaansTable
                     ->toggleable(false),
 
                 TextColumn::make('tanggal_mulai')
+                    ->label('Mulai Sewa')
                     ->date('d F Y')
+                    ->description(fn ($record) => $record->jam_mulai
+                        ? Carbon::parse($record->jam_mulai)->format('H:i') . ' WIB'
+                        : '-'
+                    )
                     ->toggleable(false)
                     ->sortable(),
 
                 TextColumn::make('tanggal_selesai')
+                    ->label('Selesai Sewa')
                     ->date('d F Y')
+                    ->description(fn ($record) => $record->jam_selesai
+                        ? Carbon::parse($record->jam_selesai)->format('H:i') . ' WIB'
+                        : '-'
+                    )
                     ->toggleable(false),
 
                 TextColumn::make('status')
@@ -94,23 +155,23 @@ class PenyewaansTable
                     ->tooltip(fn ($record) => $record->alamat_penjemputan)
                     ->toggleable(false),
 
-                TextColumn::make('tujuan')
-                    ->label('Tujuan Destinasi')
-                    ->limit(30)
-                    ->tooltip(fn ($record) => $record->tujuan)
-                    ->toggleable(false),
+                // TextColumn::make('tujuan')
+                //     ->label('Tujuan Destinasi')
+                //     ->limit(30)
+                //     ->tooltip(fn ($record) => $record->tujuan)
+                //     ->toggleable(false),
 
-                TextColumn::make('created_at')
-                    ->dateTime('d F Y')
-                    ->description(fn ($record) => $record->created_at->format('H:i'))
-                    ->label('Dibuat Pada')
-                    ->toggleable(false),
+                // TextColumn::make('created_at')
+                //     ->dateTime('d F Y')
+                //     ->description(fn ($record) => $record->created_at->format('H:i') . ' WIB')
+                //     ->label('Dibuat Pada')
+                //     ->toggleable(false),
 
-                TextColumn::make('updated_at')
-                    ->dateTime('d F Y')
-                    ->description(fn ($record) => $record->updated_at->format('H:i'))
-                    ->label('Terakhir Diubah')
-                    ->toggleable(false),
+                // TextColumn::make('updated_at')
+                //     ->dateTime('d F Y')
+                //     ->description(fn ($record) => $record->updated_at->format('H:i') . ' WIB')
+                //     ->label('Terakhir Diubah')
+                //     ->toggleable(false),
             ])
             ->filters([
                 SelectFilter::make('status')
@@ -129,19 +190,30 @@ class PenyewaansTable
                 SelectFilter::make('bulan')
                     ->label('Bulan')
                     ->placeholder('Semua Bulan')
+                    ->multiple()
                     ->native(false)
                     ->options(function () {
                         return collect(range(1, 12))->mapWithKeys(function ($month) {
                             $date = Carbon::create()->month($month);
+                
                             return [
                                 $date->format('m') => $date->translatedFormat('F'),
                             ];
                         });
                     })
-                    ->query(function ($query, $data) {
-                        if ($data['value']) {
-                            $query->whereMonth('tanggal_mulai', $data['value']);
+                    ->query(function ($query, array $data) {
+                        $values = $data['values'] ?? [];
+                
+                        if (empty($values)) {
+                            return $query;
                         }
+                
+                        $months = array_map('intval', $values);
+                
+                        return $query->whereIn(
+                            DB::raw('MONTH(tanggal_mulai)'),
+                            $months
+                        );
                     }),
 
                 SelectFilter::make('tahun')
@@ -209,22 +281,36 @@ class PenyewaansTable
                                 $supirYangSudahMenolak = $record->penugasanSupirs()
                                     ->where('status', 'ditolak')
                                     ->pluck('supir_id');
-                            
+
+                                $waktuMulai = self::getWaktuMulai($record);
+                                $waktuSelesai = self::getWaktuSelesai($record);
+
                                 return User::query()
                                     ->where('role', 'supir')
-                                    ->where('status', 'aktif')
+                                    ->whereIn('status', ['aktif', 'bertugas'])
                                     ->whereNotIn('id', $supirYangSudahMenolak)
-                                    ->whereDoesntHave('penugasanSupirs', function ($query) {
-                                        $query->whereIn('status', ['ditugaskan', 'diterima'])
-                                            ->whereHas('penyewaan', function ($q) {
-                                                $q->whereNotIn('status', ['selesai', 'dibatalkan']);
+                                    ->whereDoesntHave('penugasanSupirs', function ($query) use ($record, $waktuMulai, $waktuSelesai) {
+                                        $query
+                                            ->whereIn('status', ['ditugaskan', 'diterima'])
+                                            ->whereHas('penyewaan', function ($q) use ($record, $waktuMulai, $waktuSelesai) {
+                                                $q
+                                                    ->where('id', '!=', $record->id)
+                                                    ->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
+                                                    ->whereRaw(
+                                                        "TIMESTAMP(tanggal_mulai, COALESCE(jam_mulai, '00:00:00')) < ?",
+                                                        [$waktuSelesai]
+                                                    )
+                                                    ->whereRaw(
+                                                        "TIMESTAMP(tanggal_selesai, COALESCE(jam_selesai, '23:59:59')) > ?",
+                                                        [$waktuMulai]
+                                                    );
                                             });
                                     })
+                                    ->orderBy('name')
                                     ->pluck('name', 'id');
                             })
                             ->placeholder('Pilih supir yang tersedia'),
                     ])
-
                     ->action(function ($record, array $data) {
                         $sudahAdaSupirAktif = $record->penugasanSupirs()
                             ->whereIn('status', ['ditugaskan', 'diterima'])
@@ -244,6 +330,16 @@ class PenyewaansTable
                             Notification::make()
                                 ->title('Tidak dapat assign supir')
                                 ->body('Penyewaan sudah selesai atau dibatalkan.')
+                                ->danger()
+                                ->send();
+                    
+                            return;
+                        }
+                    
+                        if (self::supirBentrokJadwal($data['supir_id'], $record)) {
+                            Notification::make()
+                                ->title('Supir tidak tersedia')
+                                ->body('Supir ini sudah memiliki tugas lain pada jadwal sewa yang bentrok.')
                                 ->danger()
                                 ->send();
                     

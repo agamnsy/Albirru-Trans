@@ -62,11 +62,36 @@ class ArmadaForm
                     ])
                     ->required(),
                 Select::make('status')
-                    ->options(['tersedia' => 'Tersedia', 'maintenance' => 'Maintenance', 'disewa' => 'Disewa'])
+                    ->label('Status Unit')
+                    ->options([
+                        'tersedia' => 'Tersedia',
+                        'maintenance' => 'Maintenance',
+                    ])
                     ->default('tersedia')
                     ->columnSpanFull()
                     ->native(false)
                     ->selectablePlaceholder(false)
+                    ->rules(function ($record) {
+                        return [
+                            function (string $attribute, $value, \Closure $fail) use ($record) {
+                                if (! $record) {
+                                    return;
+                                }
+                
+                                if ($value !== 'maintenance') {
+                                    return;
+                                }
+                
+                                $hasActiveBooking = $record->penyewaans()
+                                    ->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
+                                    ->exists();
+                
+                                if ($hasActiveBooking) {
+                                    $fail('Armada ini masih memiliki penyewaan aktif atau terjadwal. Silakan ubah armada pada data penyewaan terlebih dahulu sebelum mengubah status unit menjadi maintenance.');
+                                }
+                            },
+                        ];
+                    })
                     ->validationMessages([
                         'required' => 'Status bus wajib dipilih',
                     ])

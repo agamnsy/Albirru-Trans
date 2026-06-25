@@ -8,54 +8,117 @@ use App\Models\Pelanggan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Carbon\Carbon;
 
 class ArmadaController extends Controller
 {
+
+    private function normalizeDate($date): ?string
+    {
+        if (! $date) {
+            return null;
+        }
+
+        return Carbon::parse($date)->format('Y-m-d');
+    }
+
+    private function normalizeTime($time): ?string
+    {
+        if (! $time) {
+            return null;
+        }
+
+        return Carbon::parse($time)->format('H:i:s');
+    }
+
+    private function combineDateTime($date, $time): ?string
+    {
+        $date = $this->normalizeDate($date);
+        $time = $this->normalizeTime($time);
+
+        if (! $date || ! $time) {
+            return null;
+        }
+
+        return Carbon::parse("{$date} {$time}")->format('Y-m-d H:i:s');
+    }
+
+    private function hasBentrokJadwal(
+        $armadaId,
+        $tanggalMulai,
+        $jamMulai,
+        $tanggalSelesai,
+        $jamSelesai
+    ): bool {
+        $waktuMulai = $this->combineDateTime($tanggalMulai, $jamMulai);
+        $waktuSelesai = $this->combineDateTime($tanggalSelesai, $jamSelesai);
+
+        if (! $armadaId || ! $waktuMulai || ! $waktuSelesai) {
+            return false;
+        }
+
+        return Penyewaan::where('armada_id', $armadaId)
+            ->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
+            ->whereRaw(
+                "TIMESTAMP(tanggal_mulai, COALESCE(jam_mulai, '00:00:00')) < ?",
+                [$waktuSelesai]
+            )
+            ->whereRaw(
+                "TIMESTAMP(tanggal_selesai, COALESCE(jam_selesai, '23:59:59')) > ?",
+                [$waktuMulai]
+            )
+            ->exists();
+    }
+
+    private function normalizePhoneNumber($phone): ?string
+    {
+        if (! $phone) {
+            return null;
+        }
+
+        $number = preg_replace('/[^0-9]/', '', $phone);
+
+        if (str_starts_with($number, '08')) {
+            return $number;
+        }
+
+        if (str_starts_with($number, '62')) {
+            return '0' . substr($number, 2);
+        }
+
+        if (str_starts_with($number, '8')) {
+            return '0' . $number;
+        }
+
+        return $number;
+    }
+
     public function index(Request $request)
     {
         $tgl_mulai = $request->query('tgl_mulai');
         $tgl_selesai = $request->query('tgl_selesai');
 
-        // Jika salah satu tanggal kosong, kirim koleksi kosong
-        if (!$tgl_mulai || !$tgl_selesai) {
+        // Jika salah satu tanggal kosong, armada belum ditampilkan.
+        if (! $tgl_mulai || ! $tgl_selesai) {
             $armadas = collect();
+
             return view('armada', compact('armadas', 'tgl_mulai', 'tgl_selesai'));
         }
 
-        // Jika ada tanggal, baru jalankan query ketersediaan
+        // Menampilkan armada yang status unitnya tersedia.
+        // Validasi bentrok jadwal berdasarkan tanggal dan jam dilakukan saat pelanggan mengirim form pemesanan.
         $armadas = Armada::where('status', 'tersedia')
-            ->whereDoesntHave('penyewaans', function ($q) use ($tgl_mulai, $tgl_selesai) {
-                $q->where(function ($inner) use ($tgl_mulai, $tgl_selesai) {
-                    $inner->whereBetween('tanggal_mulai', [$tgl_mulai, $tgl_selesai])
-                        ->orWhereBetween('tanggal_selesai', [$tgl_mulai, $tgl_selesai])
-                        ->orWhere(function ($deep) use ($tgl_mulai, $tgl_selesai) {
-                            $deep->where('tanggal_mulai', '<=', $tgl_mulai)
-                                ->where('tanggal_selesai', '>=', $tgl_selesai);
-                        });
-                })->whereIn('status', ['pending', 'dikonfirmasi']);
-            })->get();
+            ->get();
 
         return view('armada', compact('armadas', 'tgl_mulai', 'tgl_selesai'));
     }
 
-    // public function show(string $id, Request $request)
-    // {
-    //     $armada = Armada::findOrFail($id);
-
-    //     if ($armada->status !== 'tersedia' || $armada->penyewaans()->whereIn('status', ['pending', 'dikonfirmasi'])->exists()) {
-    //         return redirect()->route('armada.index')->with('error', 'Armada tidak tersedia untuk disewa.');
-    //     }
-
-    //     $tgl_mulai = $request->query('tgl_mulai');
-    //     $tgl_selesai = $request->query('tgl_selesai');
-
-    //     return view('detail', compact('armada', 'tgl_mulai', 'tgl_selesai'));
-    // }
     public function show(string $id, Request $request)
     {
         $armada = Armada::findOrFail($id);
 
-        // 🔥 VALIDASI QUERY PARAM (WAJIB)
+        // Validasi tanggal dari query URL.
+        // Detail armada tidak boleh dibuka tanpa tanggal sewa.
         $validator = Validator::make($request->all(), [
             'tgl_mulai' => 'required|date|after_or_equal:today',
             'tgl_selesai' => 'required|date|after_or_equal:tgl_mulai',
@@ -69,22 +132,12 @@ class ArmadaController extends Controller
         $tgl_mulai = $request->query('tgl_mulai');
         $tgl_selesai = $request->query('tgl_selesai');
 
-        // 🔥 CEK KETERSEDIAAN BERDASARKAN TANGGAL (INI YANG BENAR)
-        $isBooked = $armada->penyewaans()
-            ->whereIn('status', ['pending', 'dikonfirmasi'])
-            ->where(function ($q) use ($tgl_mulai, $tgl_selesai) {
-                $q->whereBetween('tanggal_mulai', [$tgl_mulai, $tgl_selesai])
-                ->orWhereBetween('tanggal_selesai', [$tgl_mulai, $tgl_selesai])
-                ->orWhere(function ($q2) use ($tgl_mulai, $tgl_selesai) {
-                    $q2->where('tanggal_mulai', '<=', $tgl_mulai)
-                        ->where('tanggal_selesai', '>=', $tgl_selesai);
-                });
-            })
-            ->exists();
-
-        if ($armada->status !== 'tersedia' || $isBooked) {
-            return redirect()->route('armada.index')
-                ->with('error', 'Armada tidak tersedia pada tanggal tersebut.');
+        // Cek apakah armada sudah memiliki penyewaan aktif
+        // yang bentrok dengan tanggal yang dipilih.
+        if ($armada->status !== 'tersedia') {
+            return back()
+                ->withInput()
+                ->with('error', 'Armada tidak tersedia untuk dipesan.');
         }
 
         return view('detail', compact('armada', 'tgl_mulai', 'tgl_selesai'));
@@ -94,83 +147,143 @@ class ArmadaController extends Controller
     {
         $armada = Armada::findOrFail($id);
 
-        if ($armada->status !== 'tersedia' || $armada->penyewaans()->whereIn('status', ['pending', 'dikonfirmasi'])->exists()) {
-            return redirect()->route('armada.index')->with('error', 'Armada tidak tersedia untuk disewa.');
+        // Di konsep baru, status armada hanya menandakan kondisi unit.
+        // Jadi yang ditolak di awal hanya armada yang bukan tersedia,
+        // misalnya maintenance.
+        if ($armada->status !== 'tersedia') {
+            return redirect()->route('armada.index')
+                ->with('error', 'Tidak ada armada yang tersedia untuk dipesan.');
         }
 
-        // 1. Validasi
-        $request->validate([
+        // Validasi input form pemesanan.
+        $validator = Validator::make($request->all(), [
             'nama_lengkap' => 'required|string|max:255',
             'nomor_hp' => 'required|string|max:20',
             'tujuan' => 'required|string',
             'alamat_penjemputan' => 'required|string',
-            'tanggal_mulai' => 'required|date',
+            'tanggal_mulai' => 'required|date|after_or_equal:today',
+            'jam_mulai' => 'required|date_format:H:i',
             'tanggal_selesai' => 'required|date|after_or_equal:tanggal_mulai',
+            'jam_selesai' => 'required|date_format:H:i',
         ], [
-            // Daftar pesan kustom dalam bahasa Indonesia
             'nama_lengkap.required' => 'Nama lengkap wajib diisi',
             'nomor_hp.required' => 'Nomor WhatsApp jangan sampai kosong',
             'tujuan.required' => 'Tujuan destinasi harus diisi',
             'alamat_penjemputan.required' => 'Alamat penjemputan mohon dilengkapi',
+            'tanggal_mulai.required' => 'Tanggal mulai sewa wajib diisi.',
+            'tanggal_mulai.after_or_equal' => 'Tanggal mulai sewa tidak boleh sebelum hari ini.',
+            'jam_mulai.required' => 'Jam mulai sewa wajib diisi.',
+            'jam_mulai.date_format' => 'Format jam mulai tidak valid.',
+            'tanggal_selesai.required' => 'Tanggal selesai sewa wajib diisi.',
             'tanggal_selesai.after_or_equal' => 'Tanggal selesai sewa tidak boleh mendahului tanggal mulai sewa.',
+            'jam_selesai.required' => 'Jam selesai sewa wajib diisi.',
+            'jam_selesai.date_format' => 'Format jam selesai tidak valid.',
+        ]);
+        
+        $validator->after(function ($validator) use ($request) {
+            $waktuMulai = $this->combineDateTime($request->tanggal_mulai, $request->jam_mulai);
+            $waktuSelesai = $this->combineDateTime($request->tanggal_selesai, $request->jam_selesai);
+        
+            if (! $waktuMulai || ! $waktuSelesai) {
+                return;
+            }
+        
+            if (Carbon::parse($waktuSelesai)->lessThanOrEqualTo(Carbon::parse($waktuMulai))) {
+                $validator->errors()->add('jam_selesai', 'Waktu selesai sewa harus lebih besar dari waktu mulai sewa.');
+            }
+        });
+        
+        $validator->validate();
+
+        $nomorHp = $this->normalizePhoneNumber($request->nomor_hp);
+
+        $request->merge([
+            'nomor_hp' => $nomorHp,
         ]);
 
         try {
             DB::beginTransaction();
 
-            // 2. Simpan/Cari Pelanggan (Sesuaikan dengan fillable model: nama, no_hp)
-            $pelanggan = Pelanggan::firstOrCreate(
-                ['no_hp' => $request->nomor_hp],
-                ['nama' => $request->nama_lengkap]
+            // Cek ulang apakah armada sudah memiliki penyewaan aktif yang bentrok dengan tanggal pemesanan.
+            // Ini tetap wajib walaupun sebelumnya armada sudah muncul di daftar, karena bisa saja ada data baru masuk sebelum form disubmit.
+            $exists = $this->hasBentrokJadwal(
+                $id,
+                $request->tanggal_mulai,
+                $request->jam_mulai,
+                $request->tanggal_selesai,
+                $request->jam_selesai
             );
 
-            $exists = Penyewaan::where('armada_id', $id)
-                ->whereIn('status', ['pending', 'dikonfirmasi'])
-                ->where(function ($q) use ($request) {
-                    $q->whereBetween('tanggal_mulai', [$request->tanggal_mulai, $request->tanggal_selesai])
-                        ->orWhereBetween('tanggal_selesai', [$request->tanggal_mulai, $request->tanggal_selesai])
-                        ->orWhere(function ($q2) use ($request) {
-                            $q2->where('tanggal_mulai', '<=', $request->tanggal_mulai)
-                                ->where('tanggal_selesai', '>=', $request->tanggal_selesai);
-                        });
-                })
-                ->exists();
-
             if ($exists) {
-                return redirect()->route('armada.index')->with('error', 'Armada tidak tersedia untuk disewa.');
+                DB::rollBack();
+            
+                return back()
+                    ->withInput()
+                    ->withErrors([
+                        'jam_mulai' => 'Armada tidak tersedia pada rentang waktu tersebut.',
+                        'jam_selesai' => 'Silakan pilih jam sewa lain.',
+                    ])
+                    ->with('error', 'Armada tidak tersedia pada rentang waktu tersebut. Silakan pilih jam sewa lain.');
             }
 
-            // 3. Simpan Penyewaan
+            // Cari atau buat pelanggan berdasarkan nomor HP.
+            // Catatan: nanti kalau pelanggan pakai soft delete dan nomor HP lama muncul lagi,
+            // bisa kita sesuaikan agar data pelanggan lama otomatis restore.
+            $pelanggan = Pelanggan::withTrashed()
+                ->where('no_hp', $nomorHp)
+                ->first();
+
+            if ($pelanggan) {
+                if ($pelanggan->trashed()) {
+                    $pelanggan->restore();
+                }
+            } else {
+                $pelanggan = Pelanggan::create([
+                    'nama' => $request->nama_lengkap,
+                    'no_hp' => $nomorHp,
+                ]);
+            }
+
+            // Simpan penyewaan.
+            // Tidak ada update status armada menjadi disewa di sini.
             Penyewaan::create([
                 'pelanggan_id' => $pelanggan->id,
                 'armada_id' => $id,
                 'tanggal_mulai' => $request->tanggal_mulai,
+                'jam_mulai' => $this->normalizeTime($request->jam_mulai),
                 'tanggal_selesai' => $request->tanggal_selesai,
+                'jam_selesai' => $this->normalizeTime($request->jam_selesai),
                 'tujuan' => $request->tujuan,
                 'alamat_penjemputan' => $request->alamat_penjemputan,
-                'status' => 'pending', // Sesuai default enum di migration kamu
+                'status' => 'pending',
             ]);
 
             DB::commit();
 
-            // 4. Redirect ke WhatsApp
             return $this->redirectToWhatsApp($request, $id);
 
         } catch (\Exception $e) {
             DB::rollBack();
-            // Log error untuk debug jika perlu: \Log::error($e->getMessage());
+
             return back()->with('error', 'Gagal menyimpan pesanan.');
         }
     }
 
-    // TAMBAHKAN INI DI BAWAH METHOD STORE
     protected function redirectToWhatsApp($request, $id)
     {
         $armada = Armada::find($id);
 
-        // Format tanggal agar lebih enak dibaca di pesan WA
-        $mulai = \Carbon\Carbon::parse($request->tanggal_mulai)->locale('id')->translatedFormat('d F Y');
-        $selesai = \Carbon\Carbon::parse($request->tanggal_selesai)->locale('id')->translatedFormat('d F Y');
+        $mulai = Carbon::parse($request->tanggal_mulai)
+            ->locale('id')
+            ->translatedFormat('d F Y');
+
+        $selesai = Carbon::parse($request->tanggal_selesai)
+            ->locale('id')
+            ->translatedFormat('d F Y');
+
+        $jamMulai = Carbon::parse($request->jam_mulai)->format('H:i') . ' WIB';
+
+        $jamSelesai = Carbon::parse($request->jam_selesai)->format('H:i') . ' WIB';
 
         $pesan = "Halo Albirru Trans,\n\n"
             . "Saya ingin menyewa armada *{$armada->nama_bus}*.\n\n"
@@ -178,19 +291,16 @@ class ArmadaController extends Controller
             . "• Nama: {$request->nama_lengkap}\n"
             . "• No. HP: {$request->nomor_hp}\n\n"
             . "*Detail Perjalanan:*\n"
-            . "• Tanggal: {$mulai} s/d {$selesai}\n"
+            . "• Mulai Sewa: {$mulai}, {$jamMulai}\n"
+            . "• Selesai Sewa: {$selesai}, {$jamSelesai}\n"
             . "• Tujuan: {$request->tujuan}\n"
             . "• Penjemputan: {$request->alamat_penjemputan}\n\n"
             . "Mohon informasi selanjutnya, terima kasih.";
 
-        // Ganti nomor ini dengan nomor WA Admin Albirru Trans yang aktif
         $nomor_admin = "6289635697054";
 
         $url = "https://wa.me/{$nomor_admin}?text=" . urlencode($pesan);
 
-        // window . open(waUrl, '_blank');
-
         return redirect()->away($url);
     }
-    // Kurung kurawal penutup class ArmadaController
 }

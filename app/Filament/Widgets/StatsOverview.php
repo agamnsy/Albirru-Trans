@@ -4,9 +4,10 @@ namespace App\Filament\Widgets;
 
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
-use App\Models\Armada; // Import Model Armada
-use App\Models\Pelanggan; // Import Model Pelanggan
-use App\Models\Penyewaan; // Import Model Penyewaan
+use App\Models\Armada;
+use App\Models\Pelanggan;
+use App\Models\Penyewaan;
+use Carbon\Carbon;
 
 class StatsOverview extends StatsOverviewWidget
 {
@@ -18,31 +19,56 @@ class StatsOverview extends StatsOverviewWidget
     
     protected function getStats(): array
     {
-        // Ambil data penyewaan 7 hari terakhir
+        $now = Carbon::now();
+
         $dataPenyewaan = collect(range(6, 0))->map(function ($days) {
             return Penyewaan::whereDate('created_at', now()->subDays($days))->count();
         })->toArray();
-        
+
+        $armadaTersediaSaatIni = Armada::where('status', 'tersedia')
+            ->whereDoesntHave('penyewaans', function ($query) use ($now) {
+                $query->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
+                    ->whereRaw(
+                        "TIMESTAMP(tanggal_mulai, COALESCE(jam_mulai, '00:00:00')) <= ?",
+                        [$now]
+                    )
+                    ->whereRaw(
+                        "TIMESTAMP(tanggal_selesai, COALESCE(jam_selesai, '23:59:59')) >= ?",
+                        [$now]
+                    );
+            })
+            ->count();
+
+        $armadaDisewaSaatIni = Armada::where('status', 'tersedia')
+            ->whereHas('penyewaans', function ($query) use ($now) {
+                $query->whereIn('status', ['pending', 'dikonfirmasi', 'berjalan'])
+                    ->whereRaw(
+                        "TIMESTAMP(tanggal_mulai, COALESCE(jam_mulai, '00:00:00')) <= ?",
+                        [$now]
+                    )
+                    ->whereRaw(
+                        "TIMESTAMP(tanggal_selesai, COALESCE(jam_selesai, '23:59:59')) >= ?",
+                        [$now]
+                    );
+            })
+            ->count();
+
         return [
-            // Mengambil jumlah baris dari tabel pelanggans
             Stat::make('Total Pelanggan', Pelanggan::count())
-                ->description('Terdaftar')
+                ->description('Pelanggan terdaftar')
                 ->color('primary'),
 
-            // Mengambil jumlah armada yang statusnya 'tersedia'
-            Stat::make('Armada Tersedia', Armada::where('status', 'tersedia')->count())
-                ->description('Siap jalan')
-                ->color('primary'),
+            Stat::make('Armada Tersedia Saat Ini', $armadaTersediaSaatIni)
+                ->description('Siap digunakan saat ini')
+                ->color('success'),
 
-            // Mengambil jumlah armada yang statusnya 'disewa'
-            Stat::make('Armada Disewa', Armada::where('status', 'disewa')->count())
-                ->description('Dalam perjalanan')
-                ->color('primary'),
+            Stat::make('Armada Disewa Saat Ini', $armadaDisewaSaatIni)
+                ->description('Sedang dalam penyewaan aktif')
+                ->color('danger'),
 
-            // Total semua penyewaan
             Stat::make('Total Penyewaan', Penyewaan::count())
                 ->chart($dataPenyewaan)
-                ->description('Berjalan dan selesai')
+                ->description('Seluruh data penyewaan')
                 ->color('primary'),
         ];
     }

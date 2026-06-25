@@ -1,5 +1,7 @@
 @extends('layouts.app')
 
+@section('title', 'Detail Armada')
+
 @section('content')
 <div class="bg-white min-h-screen pb-24">
     <nav class="py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
@@ -149,26 +151,117 @@
                     <form id="formBooking" action="{{ route('armada.sewa', $armada->id) }}" method="POST" class="space-y-5">
                         @csrf
 
+                        @if(session('error'))
+                            <div class="p-3 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm">
+                                {{ session('error') }}
+                            </div>
+                        @endif
+
                         {{-- 1. INPUT TERSEMBUNYI (Data yang beneran dikirim ke Controller) --}}
                         <input type="hidden" name="tanggal_mulai" value="{{ $tgl_mulai }}">
                         <input type="hidden" name="tanggal_selesai" value="{{ $tgl_selesai }}">
 
-                        {{-- 2. TAMPILAN VISUAL (Hanya untuk dilihat user, tidak dikirim ke server) --}}
+                        {{-- 2. TAMPILAN JADWAL SEWA --}}
                         <div class="space-y-3 p-4 border border-[#DEE2E6] rounded-lg bg-[#F8F9FA]">
                             <div>
-                                <label class="block text-[14px] font-medium text-[#212529] mb-1 ml-1">Tanggal Awal Sewa</label>
+                                <label class="block text-[14px] font-medium text-[#212529] mb-1 ml-1">Tanggal Mulai Sewa</label>
                                 <input type="text" 
                                     value="{{ \Carbon\Carbon::parse($tgl_mulai)->locale('id')->translatedFormat('d F Y') }}" 
                                     disabled 
                                     class="w-full px-4 py-3 bg-white border border-[#DEE2E6] rounded-lg text-sm font-medium text-[#ADB5BD] cursor-not-allowed">
                             </div>
+
                             <div>
-                                <label class="block text-[14px] font-medium text-[#212529] mb-1 ml-1">Tanggal Akhir Sewa</label>
+                                <label class="block text-[14px] font-medium text-[#212529] mb-1 ml-1">Jam Mulai Sewa</label>
+
+                                <input type="hidden" name="jam_mulai" id="jam_mulai" value="{{ old('jam_mulai', '07:00') }}">
+
+                                <div class="grid grid-cols-2 gap-3">
+                                    <select id="jam_mulai_hour"
+                                        class="w-full px-4 py-3 bg-white border border-[#DEE2E6] rounded-lg text-sm focus:ring-1 focus:ring-[#6C757D] outline-none">
+                                        @for ($i = 0; $i <= 23; $i++)
+                                            @php
+                                                $hour = str_pad($i, 2, '0', STR_PAD_LEFT);
+                                            @endphp
+
+                                            <option value="{{ $hour }}" {{ substr(old('jam_mulai', '07:00'), 0, 2) === $hour ? 'selected' : '' }}>
+                                                {{ $hour }}
+                                            </option>
+                                        @endfor
+                                    </select>
+
+                                    <select id="jam_mulai_minute"
+                                        class="w-full px-4 py-3 bg-white border border-[#DEE2E6] rounded-lg text-sm focus:ring-1 focus:ring-[#6C757D] outline-none">
+                                        @for ($i = 0; $i <= 59; $i++)
+                                            @php
+                                                $minute = str_pad($i, 2, '0', STR_PAD_LEFT);
+                                            @endphp
+
+                                            <option value="{{ $minute }}" {{ substr(old('jam_mulai', '07:00'), 3, 2) === $minute ? 'selected' : '' }}>
+                                                {{ $minute }}
+                                            </option>
+                                        @endfor
+                                    </select>
+                                </div>
+
+                                <!-- <p class="text-xs text-[#6C757D] mt-1 ml-1">Format waktu 24 jam, contoh: 07:00 WIB.</p> -->
+
+                                @error('jam_mulai')
+                                    <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <div>
+                                <label class="block text-[14px] font-medium text-[#212529] mb-1 ml-1">Tanggal Selesai Sewa</label>
                                 <input type="text" 
                                     value="{{ \Carbon\Carbon::parse($tgl_selesai)->locale('id')->translatedFormat('d F Y') }}" 
                                     disabled 
                                     class="w-full px-4 py-3 bg-white border border-[#DEE2E6] rounded-lg text-sm font-medium text-[#ADB5BD] cursor-not-allowed">
                             </div>
+
+                            <div>
+                                <label class="block text-[14px] font-medium text-[#212529] mb-1 ml-1">Jam Selesai Sewa</label>
+
+                                <input type="hidden" name="jam_selesai" id="jam_selesai" value="{{ old('jam_selesai', '17:00') }}">
+
+                                <div class="grid grid-cols-2 gap-3">
+                                    <select id="jam_selesai_hour"
+                                        class="w-full px-4 py-3 bg-white border border-[#DEE2E6] rounded-lg text-sm focus:ring-1 focus:ring-[#6C757D] outline-none">
+                                        @for ($i = 0; $i <= 23; $i++)
+                                            @php
+                                                $hour = str_pad($i, 2, '0', STR_PAD_LEFT);
+                                            @endphp
+
+                                            <option value="{{ $hour }}" {{ substr(old('jam_selesai', '17:00'), 0, 2) === $hour ? 'selected' : '' }}>
+                                                {{ $hour }}
+                                            </option>
+                                        @endfor
+                                    </select>
+
+                                    <select id="jam_selesai_minute"
+                                        class="w-full px-4 py-3 bg-white border border-[#DEE2E6] rounded-lg text-sm focus:ring-1 focus:ring-[#6C757D] outline-none">
+                                        @for ($i = 0; $i <= 59; $i++)
+                                            @php
+                                                $minute = str_pad($i, 2, '0', STR_PAD_LEFT);
+                                            @endphp
+
+                                            <option value="{{ $minute }}" {{ substr(old('jam_selesai', '17:00'), 3, 2) === $minute ? 'selected' : '' }}>
+                                                {{ $minute }}
+                                            </option>
+                                        @endfor
+                                    </select>
+                                </div>
+
+                                <!-- <p class="text-xs text-[#6C757D] mt-1 ml-1">Format waktu 24 jam, contoh: 17:00 WIB.</p> -->
+
+                                @error('jam_selesai')
+                                    <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <p class="text-xs text-[#6C757D] ml-1">
+                                Waktu penyewaan menggunakan zona WIB.
+                            </p>
                         </div>
 
                         <div>
@@ -220,17 +313,26 @@
 
 @push('scripts')
 <script>
-    function sendWhatsApp() {
-        const nama = document.getElementById('nama').value;
-        const bus = "{{ $armada->nama_bus }}";
-        const tglMulai = "{{ $tgl_mulai }}";
-        const tglSelesai = "{{ $tgl_selesai }}";
-        
-        const message = `Halo Albirru Trans, saya ${nama}. Saya ingin memesan armada ${bus} untuk tanggal ${tglMulai} sampai ${tglSelesai}. Mohon informasi ketersediaannya.`;
-        const waUrl = `https://wa.me/628123456789?text=${encodeURIComponent(message)}`;
-        
-        window.open(waUrl, '_blank');
+    function updateJamInput(prefix) {
+        const hour = document.getElementById(`${prefix}_hour`).value;
+        const minute = document.getElementById(`${prefix}_minute`).value;
+
+        document.getElementById(prefix).value = `${hour}:${minute}`;
     }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        ['jam_mulai', 'jam_selesai'].forEach(function (prefix) {
+            updateJamInput(prefix);
+
+            document.getElementById(`${prefix}_hour`).addEventListener('change', function () {
+                updateJamInput(prefix);
+            });
+
+            document.getElementById(`${prefix}_minute`).addEventListener('change', function () {
+                updateJamInput(prefix);
+            });
+        });
+    });
 
     function confirmBooking() {
         Swal.fire({
@@ -293,11 +395,15 @@ Swal.fire({
 
 @if(session('error'))
 <script>
-Swal.fire({
-    icon: 'error',
-    title: 'Gagal',
-    text: '{{ session('error') }}',
+document.addEventListener('DOMContentLoaded', function () {
+    Swal.fire({
+        icon: 'error',
+        title: 'Gagal',
+        text: @json(session('error')),
+    });
 });
 </script>
 @endif
+
+
 @endsection

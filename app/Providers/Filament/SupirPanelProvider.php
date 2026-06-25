@@ -24,6 +24,8 @@ use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
+use Filament\View\PanelsRenderHook;
+use Illuminate\Support\HtmlString;
 
 class SupirPanelProvider extends PanelProvider
 {
@@ -34,6 +36,10 @@ class SupirPanelProvider extends PanelProvider
             ->path('supir')
             ->font('Plus Jakarta Sans')
             ->login()
+            ->brandLogo(asset('logo/horizontal-light.svg'))
+            ->darkModeBrandLogo(asset('logo/horizontal-dark.svg'))
+            ->brandLogoHeight('1.8rem')
+            ->favicon(asset('logo/logo-512.svg'))
             ->globalSearch(false)
             ->collapsibleNavigationGroups(false)
             ->colors([
@@ -65,6 +71,25 @@ class SupirPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
-            ]);
+            ])
+            ->renderHook(
+                'panels::head.end',
+                fn () => new \Illuminate\Support\HtmlString("
+                    <link rel=\"manifest\" href=\"/manifest-supir.json\">
+                    <meta name=\"theme-color\" content=\"#196FEB\">
+                    <meta name=\"mobile-web-app-capable\" content=\"yes\">
+                    <meta name=\"apple-mobile-web-app-capable\" content=\"yes\">
+                    <meta name=\"apple-mobile-web-app-title\" content=\"Albirru Supir\">
+                    <link rel=\"apple-touch-icon\" href=\"/logo/logo-192.svg\">
+            
+                    <script>
+                        if ('serviceWorker' in navigator) {
+                            window.addEventListener('load', function () {
+                                navigator.serviceWorker.register('/service-worker.js');
+                            });
+                        }
+                    </script>
+                "),
+            );
     }
 }
